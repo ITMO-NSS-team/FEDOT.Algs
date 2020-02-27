@@ -1,6 +1,6 @@
 BSD 3-Clause License
 
-Copyright (c) 2020, Natural Systems Simulation Team
+Copyright (c) 2020, Natural Systems Simulation Team (Irina Barabanova, Alexander Hvatov, Anna Kalyuzhnaya, Mikhail Maslyaev, Nikolai Nikitin, Yana Polonskaya, Pavel Vychuzhanin)
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
