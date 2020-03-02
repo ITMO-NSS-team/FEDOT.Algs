@@ -1,5 +1,5 @@
-import os
 from PIL import Image, ImageDraw
+import os
 
 
 class Tree_Drawing:
@@ -13,12 +13,12 @@ class Tree_Drawing:
                 result += self._getwidth(node.nodes_from[i])
             return result
 
-    def _draw_node(self, node, draw, x, y):
+    def _drawnode(self, node, draw, x, y):
         if node.nodes_from:
-            all_width = 0
+            allwidth = 0
             for c in node.nodes_from:
-                all_width += self._getwidth(c) * 100
-            left = x - all_width / 2
+                allwidth += self._getwidth(c) * 100
+            left = x - allwidth / 2
             # draw the function name
             draw.text((x - 10, y - 10), node.eval_strategy.model.__class__.__name__, (0, 0, 0))
 
@@ -26,7 +26,7 @@ class Tree_Drawing:
             for c in node.nodes_from:
                 wide = self._getwidth(c) * 100
                 draw.line((x, y, left + wide / 2, y + 100), fill=(255, 0, 0))
-                self._draw_node(c, draw, left + wide / 2, y + 100)
+                self._drawnode(c, draw, left + wide / 2, y + 100)
                 left = left + wide
         else:
             draw.text((x - 5, y), str(node.eval_strategy.model.__class__.__name__), (0, 0, 0))
@@ -45,5 +45,5 @@ class Tree_Drawing:
 
         img = Image.new('RGB', (w, h), (255, 255, 255))
         draw = ImageDraw.Draw(img)
-        self._draw_node(node, draw, w / 2, 20)
+        self._drawnode(node, draw, w / 2, 20)
         img.save(f'HistoryFiles/Trees/{jpeg}', 'PNG')
