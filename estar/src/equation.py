@@ -94,7 +94,9 @@ class Equation:
         
     def Fit_estimator(self, estimator_type = 'Ridge'): # Fitting selected estimator
         if estimator_type == 'Lasso':
-            self.estimator = Lasso(alpha = self.alpha)
+            self.estimator = Lasso(alpha = self.alpha, copy_X=True, fit_intercept=True, max_iter=1000,
+                                   normalize=False, positive=False, precompute=False, random_state=None,
+                                   selection='cyclic', tol=0.0001, warm_start=False)
             self.estimator.fit(self.features, self.target) 
         elif estimator_type == 'Ridge':
             self.estimator = Ridge(alpha = self.alpha)
@@ -109,9 +111,8 @@ class Equation:
         # Evaluate target & features
         self.Evaluate_equation()
         self.Apply_ML()
-        
-        #print('Norm of error:', np.linalg.norm(np.dot(self.features, self.weights) - self.target, ord = 2))
-        self.fitness_value = 1 / (np.linalg.norm(np.dot(self.features, self.weights) - self.target, ord = 2)) 
+        self.fitness_value = 1 / (np.linalg.norm(np.dot(self.features, self.weights) - self.target, ord = 2) + 
+                                  self.alpha * np.linalg.norm(self.weights, ord = 1)) 
         if np.sum(self.weights) == 0:
             self.fitness_value = self.fitness_value * penalty_coeff
         return self.fitness_value

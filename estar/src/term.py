@@ -19,12 +19,24 @@ def Check_Unqueness(term, equation):
     else:
         return not any([all(term == equation_term.gene) for equation_term in equation])
 
-def normalize_ts(Input):    # Normalization of data time-frame
+def normalize_ts_old(Input):    # Normalization of data time-frame
     Matrix = np.copy(Input)
     for i in np.arange(Matrix.shape[0]):
         norm  = np.abs(np.max(np.abs(Matrix[i, :])))
         if norm != 0:
             Matrix[i] = Matrix[i] / norm
+        else:
+            Matrix[i] = 1
+    return Matrix
+
+
+def normalize_ts(Input):    # Normalization of data time-frame
+    Matrix = np.copy(Input)
+    for i in np.arange(Matrix.shape[0]):
+        #norm  = np.abs(np.max(np.abs(Matrix[i, :])))
+        std = np.std(Matrix[i])
+        if std != 0:
+            Matrix[i] = (Matrix[i] - np.mean(Matrix[i])) / std
         else:
             Matrix[i] = 1
     return Matrix

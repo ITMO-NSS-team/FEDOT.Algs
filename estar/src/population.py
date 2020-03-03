@@ -51,24 +51,25 @@ class Population:
     def Initiate_Evolution(self, iter_number, estimator_type, log_file = None, test_indicators = False):
         self.fitness_values = np.empty(iter_number)
         for idx in range(iter_number):
-            print('iteration %3d' % idx)
             strict_restrictions = False if idx < iter_number - 1 else True
             self.Genetic_Iteration(estimator_type = estimator_type, strict_restrictions = strict_restrictions)
             self.population = Population_Sort(self.population)
             self.fitness_values[idx]= self.population[0].fitness_value
             if log_file: log_file.Write_apex(self.population[0], idx)
             if test_indicators: 
+                print('iteration %3d' % idx)
                 print('best fitness:', self.population[0].fitness_value, ', worst_fitness', self.population[-1].fitness_value)
                 print('gene of target term:', self.population[0].terms[self.population[0].target_idx].gene)
+                print('weights:', self.population[0].weights)
         return self.fitness_values
 
     def Calculate_True_Weights(self, evaluator, eval_params):
         self.population = Population_Sort(self.population)
         self.population = self.population[:self.pop_size]
-        print('Final gene:', self.population[0].terms[self.population[0].target_idx].gene)
-        print(self.population[0].fitness_value, Decode_Gene(self.population[0].terms[self.population[0].target_idx].gene,
-              self.tokens, list(self.token_params.keys()), self.n_params))
-        print('weights:', self.population[0].weights)       
+#        print('Final gene:', self.population[0].terms[self.population[0].target_idx].gene)
+#        print(self.population[0].fitness_value, Decode_Gene(self.population[0].terms[self.population[0].target_idx].gene,
+#              self.tokens, list(self.token_params.keys()), self.n_params))
+#        print('weights:', self.population[0].weights)       
         self.target_term, self.zipped_list = Get_true_coeffs(evaluator, eval_params, self.tokens, list(self.token_params.keys()),
                                                               self.population[0], self.n_params)  
         
@@ -110,7 +111,6 @@ def Tournament_crossover(population, part_with_offsprings, tokens,
 
 def Get_true_coeffs(evaluator, eval_params, tokens, token_params, equation, n_params = 2):
     target = equation.terms[equation.target_idx]
-    print('Target key:', Decode_Gene(target.gene, tokens, token_params, n_params))
 
     target_vals = target.Evaluate(evaluator, False, eval_params)    
     features_list = []

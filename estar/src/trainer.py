@@ -10,7 +10,13 @@ import numpy as np
 import datetime
 from src.population import Population
 
-
+def Set_argument(var, fun_kwargs, base_value):
+    try:
+        res = fun_kwargs[var]
+    except KeyError:
+        res = base_value
+    return res
+    
 def Discover_Equtaion(tokens, token_params, basic_terms, **kwargs): 
     '''
     
@@ -21,33 +27,52 @@ def Discover_Equtaion(tokens, token_params, basic_terms, **kwargs):
 
     assert 'evaluator' in kwargs.keys() and 'eval_params' in kwargs.keys()
     
-    alpha = kwargs['alpha'] if 'alpha' in kwargs.keys() else 0.2
-    a_proc = kwargs['a_proc'] if 'a_proc' in kwargs.keys() else 0.2
-    r_crossover = kwargs['r_crossover'] if 'r_crossover' in kwargs.keys() else 0.3
-    r_param_mutation = kwargs['r_param_mutation'] if 'r_param_mutation' in kwargs.keys() else 0.7
-    r_mutation = kwargs['r_mutation'] if 'r_mutation' in kwargs.keys() else 0.3 
-    mut_chance = kwargs['mut_chance'] if 'mut_chance' in kwargs.keys() else 0.6
-    iter_number = kwargs['iter_number'] if 'iter_number' in kwargs.keys() else 100
-    pop_size = kwargs['pop_size'] if 'pop_size' in kwargs.keys() else 8
-    eq_len = kwargs['eq_len'] if 'eq_len' in kwargs.keys() else 6
-    max_factors = kwargs['max_factors'] if 'max_factors' in kwargs.keys() else 2
-    
-    print('in "process cell" function: ', type(tokens), tokens)
+    alpha = Set_argument('alpha', kwargs, 1) 
+    a_proc = Set_argument('a_proc', kwargs, 0.2)
+    r_crossover = Set_argument('r_crossover', kwargs, 0.3)
+    r_param_mutation = Set_argument('r_param_mutation', kwargs, 0.7)
+    r_mutation = Set_argument('r_mutation', kwargs, 0.3)
+    mut_chance = Set_argument('mut_chance', kwargs, 0.6)
+    iter_number = Set_argument('iter_number', kwargs, 100)
+    pop_size = Set_argument('pop_size', kwargs, 8)
+    eq_len = Set_argument('eq_len', kwargs, 6)
+    max_factors = Set_argument('max_factors', kwargs, 2)
+    test_output = Set_argument('test_output', kwargs, False)
+
     population = Population(kwargs['evaluator'], kwargs['eval_params'], tokens, token_params,
                                    pop_size = pop_size, basic_terms = basic_terms, a_proc = a_proc,
                                    r_crossover = r_crossover, r_param_mutation = r_param_mutation,
                                    r_mutation=r_mutation, mut_chance = mut_chance,
                                    alpha = alpha, eq_len = eq_len, max_factors_in_terms = max_factors)
 
-    best_fitnesses = population.Initiate_Evolution(iter_number = iter_number, estimator_type='Lasso', log_file = None, test_indicators = True)
+    best_fitnesses = population.Initiate_Evolution(iter_number = iter_number, estimator_type='Lasso', 
+                                                   log_file = None, test_indicators = test_output)
     
-    print('Achieved best fitness:', best_fitnesses[-1])
+    print('Achieved best fitness:', best_fitnesses[-1], 'with alpha =', alpha)
     
     population.Calculate_True_Weights(kwargs['evaluator'], kwargs['eval_params'])
                     
     t2 = datetime.datetime.now()
     res = ((t1, t2), (population.target_term, population.zipped_list), best_fitnesses) 
-    print('result:', res[:-1])            
+    print('Discovered equation:')
+
+    print('- {', end='')
+    for key, value in population.target_term.items():
+        if value['power'] != 0 and key != '1':
+            print(' ', key, ':', value, end='')
+    print('} + ' , end='')
+
+    for term_idx in range(len(population.zipped_list)):
+        print(population.zipped_list[term_idx][1], '* {', end='')
+        for key, value in population.zipped_list[term_idx][0].items():
+            if value['power'] != 0 and key != '1':
+                print(' ', key, ':', value, end='')
+        if term_idx != len(population.zipped_list) - 1:
+            print('} + ', end='')
+        else:
+            print('} = 0')
+        
+    #print('result:', res[:-1])            
 #    return best_fitnesses
 
 
@@ -115,9 +140,7 @@ class Equation_Trainer:
         self.evaluator_params = evaluator_params
         self.basic_terms = basic_terms
         self.tuning_grid = None
-        print('Set parameters for the evolutionary algorithm:')
-        print('')
-    
+        
     
     def Parameters_grid(self, parameters_order, params):
         '''
@@ -210,7 +233,9 @@ class Equation_Trainer:
         
         if self.tuning_grid:
             print('Using parameters from grid')
-            use_params = np.vectorize(Discover_Equtaion, otypes = None, excluded = ['tokens', 'token_params', 'basic_terms', 'evaluator', 'eval_params', 'iter_number'])
+            use_params = np.vectorize(Discover_Equtaion, otypes = None, 
+                                      excluded = ['tokens', 'token_params', 'basic_terms', 'evaluator', 'eval_params', 'iter_number'],
+                                      cache=True)
             use_params(tokens = self.tokens, token_params = self.token_params, basic_terms = self.basic_terms,
                        evaluator = self.evaluator, eval_params = self.evaluator_params, iter_number = epochs, 
                        alpha = self.tuning_grid[self.parameters_order.index('alpha')], 

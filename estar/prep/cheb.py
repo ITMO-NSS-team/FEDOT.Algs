@@ -30,7 +30,7 @@ def Get_cheb_for_point(matrix, axis, idx, grid, max_der_order = 3, points = 9):
 def Process_Point_Cheb(args):
     global PolyBoundary
     idx = np.array(args[0]); matrix = args[1]; grid = args[2]; points = args[3]; n_der = args[4]; poly_bound = args[5]
-    print(args[0])
+    #print(args[0])
     poly_mask = [idx[dim] >= poly_bound and idx[dim] <= matrix.shape[dim] - poly_bound for dim in np.arange(matrix.ndim)]
     polynomials = np.empty(matrix.ndim, dtype = np.polynomial.chebyshev.Chebyshev)
     x = np.empty(idx.shape)
