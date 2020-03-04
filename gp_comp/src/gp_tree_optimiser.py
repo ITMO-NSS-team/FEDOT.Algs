@@ -1,14 +1,32 @@
-import numpy as np
 from copy import deepcopy
-from core.composer.gp_composer.gp_node import GP_Node
-from core.composer.optimisers.evo_operators import tournament_selection, standard_crossover, \
-    standard_mutation
-from core.composer.tree_drawing import Tree_Drawing
 from random import choice, randint
 from typing import (
     List,
-    Callable
+    Callable,
+    Optional,
+    SupportsInt,
+    SupportsFloat
 )
+
+import numpy as np
+
+from gp_comp.example.classes.model import Model
+from gp_comp.src.evo_operators import tournament_selection, standard_crossover, \
+    standard_mutation
+from gp_comp.src.gp_node import GP_Node
+from gp_comp.src.treedrawing import TreeDrawing
+
+
+class ComposerRequirements:
+    def __init__(self, primary: List[Model], secondary: List[Model],
+                 max_depth: Optional[int] = None,
+                 max_arity: Optional[int] = None,
+                 is_visualise: bool = False):
+        self.primary = primary
+        self.secondary = secondary
+        self.max_depth = max_depth
+        self.max_arity = max_arity
+        self.is_visualise = is_visualise
 
 
 class GPComposerRequirements(ComposerRequirements):
@@ -34,7 +52,7 @@ class GPChainOptimiser:
         else:
             self.population = initial_chain or self._make_population(self.requirements.pop_size)
 
-        Tree_Drawing().draw_branch(node=self.population[1], jpeg="tree.png")
+        TreeDrawing().draw_branch(node=self.population[1], jpeg="tree.png")
 
     def optimise(self, metric_function_for_nodes):
         history = []

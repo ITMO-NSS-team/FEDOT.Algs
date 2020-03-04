@@ -1,23 +1,9 @@
-from core.composer.node import Node
-from core.models.data import InputData
-from core.models.evaluation import EvaluationStrategy
-from core.models.model import Model
-from typing import (List, Optional)
-from abc import abstractmethod
-from core.composer.node import NodeGenerator
 from copy import deepcopy
+from typing import (List, Optional)
 
-
-class GP_NodeGenerator:
-    @staticmethod
-    def primary_node(model: Model, input_data: InputData, nodes_to: Optional[Node] = None) -> Node:
-        chain_node = NodeGenerator.primary_node(model=model, input_data=input_data)
-        return GP_Node(chain_node=chain_node, nodes_to=nodes_to)
-
-    @staticmethod
-    def secondary_node(model: Model, nodes_to: Optional[Node] = None) -> Node:
-        chain_node = NodeGenerator.secondary_node(model=model)
-        return GP_Node(chain_node=chain_node, nodes_to=nodes_to)
+from gp_comp.example.classes.data import InputData
+from gp_comp.example.classes.model import Model
+from gp_comp.example.classes.node import Node, NodeGenerator
 
 
 class GP_Node:
@@ -70,3 +56,15 @@ class GP_Node:
         newnode.nodes_to = self.nodes_to
         self.nodes_to.nodes_from[self.nodes_to.nodes_from.index(self)] = newnode
         self = newnode
+
+
+class GP_NodeGenerator:
+    @staticmethod
+    def primary_node(model: Model, input_data: InputData, nodes_to: Optional[Node] = None) -> GP_Node:
+        chain_node = NodeGenerator.primary_node(model=model, input_data=input_data)
+        return GP_Node(chain_node=chain_node, nodes_to=nodes_to)
+
+    @staticmethod
+    def secondary_node(model: Model, nodes_to: Optional[Node] = None) -> GP_Node:
+        chain_node = NodeGenerator.secondary_node(model=model)
+        return GP_Node(chain_node=chain_node, nodes_to=nodes_to)

@@ -1,8 +1,10 @@
-import numpy as np
 import random
 from copy import deepcopy
-from core.composer.tree_drawing import Tree_Drawing
 from random import randint, choice
+
+import numpy as np
+
+from gp_comp.src.treedrawing import TreeDrawing
 
 
 def tournament_selection(fitnesses, minimization=True, group_size=5):
@@ -37,12 +39,12 @@ def standard_crossover(tree1, tree2, max_depth, crossover_prob, pair_num=None, p
     changed_node = choice(tree1_copy.get_nodes_from_layer(rn_layer))
     node_for_change = choice(tree2.get_nodes_from_layer(rn_self_layer))
 
-    Tree_Drawing().draw_branch(node=tree1,
-                               jpeg=f'p1_pair{pair_num}_pop{pop_num}_rnlayer{rn_layer}'
-                                    f'({changed_node.eval_strategy.model.__class__.__name__}).png')
-    Tree_Drawing().draw_branch(node=tree2,
-                               jpeg=f'p2_pair{pair_num}_pop{pop_num}_rnselflayer{rn_self_layer}'
-                                    f'({node_for_change.eval_strategy.model.__class__.__name__}).png')
+    TreeDrawing().draw_branch(node=tree1,
+                              jpeg=f'p1_pair{pair_num}_pop{pop_num}_rnlayer{rn_layer}'
+                                   f'({changed_node.eval_strategy.model.__class__.__name__}).png')
+    TreeDrawing().draw_branch(node=tree2,
+                              jpeg=f'p2_pair{pair_num}_pop{pop_num}_rnselflayer{rn_self_layer}'
+                                   f'({node_for_change.eval_strategy.model.__class__.__name__}).png')
 
     if rn_layer == 0:
         return tree1_copy
@@ -52,7 +54,7 @@ def standard_crossover(tree1, tree2, max_depth, crossover_prob, pair_num=None, p
         print(node_for_change.get_depth_down())
         print(node_for_change.get_depth_up())
         changed_node.swap_nodes(node_for_change)
-        Tree_Drawing().draw_branch(node=tree1_copy, jpeg=f'result_pair{pair_num}_pop{pop_num}.png')
+        TreeDrawing().draw_branch(node=tree1_copy, jpeg=f'result_pair{pair_num}_pop{pop_num}.png')
         return tree1_copy
     else:
         return tree1_copy
@@ -62,7 +64,7 @@ def standard_mutation(root_node, secondary_requirements, primary_requirements, p
     if not probability:
         probability = 1.0 / root_node.get_depth_down()
 
-    Tree_Drawing().draw_branch(node=root_node, jpeg=f'tree(mut).png')
+    TreeDrawing().draw_branch(node=root_node, jpeg=f'tree(mut).png')
 
     def _node_mutate(node):
         if node.nodes_from:
@@ -76,6 +78,6 @@ def standard_mutation(root_node, secondary_requirements, primary_requirements, p
 
     result = deepcopy(root_node)
     _node_mutate(node=result)
-    Tree_Drawing().draw_branch(node=result, jpeg=f'tree after mut.png')
+    TreeDrawing().draw_branch(node=result, jpeg=f'tree after mut.png')
 
     return result

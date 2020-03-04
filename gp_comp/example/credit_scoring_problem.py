@@ -36,34 +36,44 @@ full_path_test = os.path.join(str(project_root()), file_path_test)
 dataset_to_validate = InputData.from_csv(full_path_test)
 
 # start chain building
-new_chain = Chain()
+complex_chain = Chain()
 
 last_node = NodeGenerator.secondary_node(MLP())
 
 y1 = NodeGenerator.primary_node(XGBoost(), dataset_to_train)
-new_chain.add_node(y1)
+complex_chain.add_node(y1)
 
 y2 = NodeGenerator.primary_node(LDA(), dataset_to_train)
-new_chain.add_node(y2)
+complex_chain.add_node(y2)
 
-y3 = NodeGenerator.secondary_node(XGBoost(), [y1, y2])
-new_chain.add_node(y3)
+y3 = NodeGenerator.secondary_node(RandomForest(), [y1, y2])
+complex_chain.add_node(y3)
 
 y4 = NodeGenerator.primary_node(KNN(), dataset_to_train)
-new_chain.add_node(y4)
+complex_chain.add_node(y4)
 y5 = NodeGenerator.primary_node(DecisionTree(), dataset_to_train)
-new_chain.add_node(y5)
+complex_chain.add_node(y5)
 
-y6 = NodeGenerator.secondary_node(XGBoost(), [y4, y5])
-new_chain.add_node(y6)
+y6 = NodeGenerator.secondary_node(QDA(), [y4, y5])
+complex_chain.add_node(y6)
 
 last_node.nodes_from = [y3, y6]
-new_chain.add_node(last_node)
+complex_chain.add_node(last_node)
+
+simple_chain = Chain()
+y1 = NodeGenerator.primary_node(XGBoost(), dataset_to_train)
+simple_chain.add_node(y1)
+
+import warnings
+
+warnings.filterwarnings("ignore")
 
 visualiser = ChainVisualiser()
-visualiser.visualise(new_chain)
+visualiser.visualise(complex_chain)
 
-# the quality assessment for the obtained composite model
-roc_on_chain = calculate_validation_metric(new_chain, dataset_to_validate)
+# the quality assessment for the obtained models
+roc_on_complex_chain = calculate_validation_metric(complex_chain, dataset_to_validate)
+roc_on_simple_chain = calculate_validation_metric(simple_chain, dataset_to_validate)
 
-print(f'ROC AUC is {round(roc_on_chain, 3)}')
+print(f'ROC AUC for complex chain is {round(roc_on_complex_chain, 3)}')
+print(f'ROC AUC for single model is {round(roc_on_simple_chain, 3)}')
