@@ -60,10 +60,6 @@ complex_chain.add_node(y6)
 last_node.nodes_from = [y3, y6]
 complex_chain.add_node(last_node)
 
-simple_chain = Chain()
-y1 = NodeGenerator.primary_node(XGBoost(), dataset_to_train)
-simple_chain.add_node(y1)
-
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -73,7 +69,5 @@ visualiser.visualise(complex_chain)
 
 # the quality assessment for the obtained models
 roc_on_complex_chain = calculate_validation_metric(complex_chain, dataset_to_validate)
-roc_on_simple_chain = calculate_validation_metric(simple_chain, dataset_to_validate)
 
 print(f'ROC AUC for complex chain is {round(roc_on_complex_chain, 3)}')
-print(f'ROC AUC for single model is {round(roc_on_simple_chain, 3)}')
