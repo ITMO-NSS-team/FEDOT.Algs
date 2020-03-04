@@ -2,10 +2,10 @@ import numpy as np
 from sklearn import preprocessing
 from sklearn.impute import SimpleImputer
 
-from core.models.data import (
+from gp_comp.example.classes.data import (
     InputData
 )
-from core.models.model import (
+from gp_comp.example.classes.model import (
     Model
 )
 

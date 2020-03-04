@@ -1,22 +1,14 @@
-import numpy as np
 import os
 import random
-from core.composer.chain import Chain
-from core.composer.composer import ComposerRequirements
-from core.composer.composer import DummyChainTypeEnum
-from core.composer.composer import DummyComposer
-from core.composer.gp_composer.gp_composer import GPComposer, GPComposerRequirements
-from core.composer.visualisation import ChainVisualiser
-from core.models.data import InputData
-from core.models.model import *
-from core.repository.model_types_repository import (
-    ModelMetaInfoTemplate,
-    ModelTypesRepository
-)
-from core.repository.quality_metrics_repository import MetricsRepository, ClassificationMetricsEnum
-from core.repository.task_types import MachineLearningTasksEnum
-from core.utils import project_root
+
+import numpy as np
 from sklearn.metrics import roc_auc_score as roc_auc
+
+from gp_comp.example.classes.chain import Chain
+from gp_comp.example.classes.model import *
+from gp_comp.example.classes.node import NodeGenerator
+from gp_comp.example.classes.utils import project_root
+from gp_comp.example.classes.visualisation import ChainVisualiser
 
 random.seed(1)
 np.random.seed(1)
@@ -34,35 +26,35 @@ def calculate_validation_metric(chain: Chain, dataset_to_validate: InputData) ->
 # the dataset was obtained from https://www.kaggle.com/kashnitsky/a5-demo-logit-and-rf-for-credit-scoring
 
 # a dataset that will be used as a train and test set during composition
-file_path_train = 'gp_comp/example/data/scoring_train.csv'
+file_path_train = 'data\scoring_train.csv'
 full_path_train = os.path.join(str(project_root()), file_path_train)
 dataset_to_compose = InputData.from_csv(full_path_train)
 
 # a dataset for a final validation of the composed model
-file_path_test = 'cases/data/scoring/scoring_test.csv'
+file_path_test = 'data\scoring_test.csv'
 full_path_test = os.path.join(str(project_root()), file_path_test)
 dataset_to_validate = InputData.from_csv(full_path_test)
 
 # start chain building
 new_chain = Chain()
 
-last_node = NodeGenerator.secondary_node([MLP])
+last_node = NodeGenerator.secondary_node(MLP())
 
-y1 = NodeGenerator.primary_node([XGBoost], data)
+y1 = NodeGenerator.primary_node(XGBoost(), dataset_to_compose)
 new_chain.add_node(y1)
 
-y2 = NodeGenerator.primary_node([LDA], data)
+y2 = NodeGenerator.primary_node(LDA(), dataset_to_compose)
 new_chain.add_node(y2)
 
-y3 = NodeGenerator.secondary_node([XGBoost], [y1, y2])
+y3 = NodeGenerator.secondary_node(XGBoost(), [y1, y2])
 new_chain.add_node(y3)
 
-y4 = NodeGenerator.primary_node([KNN], data)
+y4 = NodeGenerator.primary_node(KNN(), dataset_to_compose)
 new_chain.add_node(y4)
-y5 = NodeGenerator.primary_node([XGBoost], data)
+y5 = NodeGenerator.primary_node(XGBoost(), dataset_to_compose)
 new_chain.add_node(y5)
 
-y6 = NodeGenerator.secondary_node(secondary_requirements[4], [y4, y5])
+y6 = NodeGenerator.secondary_node(XGBoost(), [y4, y5])
 new_chain.add_node(y6)
 
 last_node.nodes_from = [y3, y6]
@@ -72,6 +64,6 @@ visualiser = ChainVisualiser()
 visualiser.visualise(new_chain)
 
 # the quality assessment for the obtained composite model
-roc_on_chain = calculate_validation_metric_for_scoring_model(chain_static, dataset_to_validate)
+roc_on_chain = calculate_validation_metric(new_chain, dataset_to_validate)
 
-print(f'Composed ROC AUC is {round(roc_on_chain, 3)}')
+print(f'ROC AUC is {round(roc_on_chain, 3)}')

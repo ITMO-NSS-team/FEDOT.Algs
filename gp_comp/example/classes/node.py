@@ -5,9 +5,9 @@ from typing import (List, Optional)
 
 import numpy as np
 
-from core.models.data import Data, InputData, OutputData
-from core.models.evaluation import EvaluationStrategy
-from core.models.model import Model
+from gp_comp.example.classes.data import Data, InputData, OutputData
+from gp_comp.example.classes.evaluation import EvaluationStrategy
+from gp_comp.example.classes.model import Model
 
 
 class Node(ABC):

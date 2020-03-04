@@ -1,8 +1,8 @@
 from copy import deepcopy
 from typing import Optional
 
-from core.composer.node import Node, SecondaryNode, PrimaryNode
-from core.models.data import InputData, OutputData
+from gp_comp.example.classes.data import InputData, OutputData
+from gp_comp.example.classes.node import Node, SecondaryNode, PrimaryNode
 
 
 class Chain:

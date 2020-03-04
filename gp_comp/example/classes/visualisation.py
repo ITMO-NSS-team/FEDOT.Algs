@@ -8,7 +8,7 @@ import pandas as pd
 from PIL import Image
 from imageio import get_reader, mimsave
 
-from core.composer.composer import Chain
+from gp_comp.example.classes.chain import Chain
 
 
 class ChainVisualiser:

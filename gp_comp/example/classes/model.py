@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Tuple
-
 from dataclasses import dataclass
+from enum import Enum
 from typing import Tuple
 
 from sklearn.discriminant_analysis import (
@@ -14,19 +13,37 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
 from xgboost import XGBClassifier
 
-from core.models.data import (
+from gp_comp.example.classes.data import (
     InputData,
     split_train_test,
 )
-from core.repository.dataset_types import (
-    DataTypesEnum, NumericalDataTypesEnum
-)
+
+
+class DataTypesEnum(Enum):
+    pass
+
+
+class NumericalDataTypesEnum(DataTypesEnum):
+    vector = 'numerical_vector'
+    table = 'numerical_table'
+    ts = 'numerical_timeseries'
+
+
+class CategoricalDataTypesEnum(DataTypesEnum):
+    vector = 'categoriсal_vector'
+    table = 'categoriсal_table'
+    ts = 'categoriсal_timeseries'
+
+
+class SpecialDataTypesEnum(DataTypesEnum):
+    text = 'text'
+    binary = 'binary'
 
 
 @dataclass
 class Model(ABC):
-    input_type: DataTypesEnum
-    output_type: DataTypesEnum
+    input_type: NumericalDataTypesEnum
+    output_type: NumericalDataTypesEnum
     __model = None
 
     @abstractmethod
