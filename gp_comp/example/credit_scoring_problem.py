@@ -28,7 +28,7 @@ def calculate_validation_metric(chain: Chain, dataset_to_validate: InputData) ->
 # a dataset that will be used as a train and test set during composition
 file_path_train = 'data\scoring_train.csv'
 full_path_train = os.path.join(str(project_root()), file_path_train)
-dataset_to_compose = InputData.from_csv(full_path_train)
+dataset_to_train = InputData.from_csv(full_path_train)
 
 # a dataset for a final validation of the composed model
 file_path_test = 'data\scoring_test.csv'
@@ -40,18 +40,18 @@ new_chain = Chain()
 
 last_node = NodeGenerator.secondary_node(MLP())
 
-y1 = NodeGenerator.primary_node(XGBoost(), dataset_to_compose)
+y1 = NodeGenerator.primary_node(XGBoost(), dataset_to_train)
 new_chain.add_node(y1)
 
-y2 = NodeGenerator.primary_node(LDA(), dataset_to_compose)
+y2 = NodeGenerator.primary_node(LDA(), dataset_to_train)
 new_chain.add_node(y2)
 
 y3 = NodeGenerator.secondary_node(XGBoost(), [y1, y2])
 new_chain.add_node(y3)
 
-y4 = NodeGenerator.primary_node(KNN(), dataset_to_compose)
+y4 = NodeGenerator.primary_node(KNN(), dataset_to_train)
 new_chain.add_node(y4)
-y5 = NodeGenerator.primary_node(XGBoost(), dataset_to_compose)
+y5 = NodeGenerator.primary_node(DecisionTree(), dataset_to_train)
 new_chain.add_node(y5)
 
 y6 = NodeGenerator.secondary_node(XGBoost(), [y4, y5])
