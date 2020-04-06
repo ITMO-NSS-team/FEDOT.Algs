@@ -4,107 +4,116 @@ from typing import (
     List,
     Callable,
     Optional,
-    SupportsInt,
-    SupportsFloat
+    Any
 )
 
 import numpy as np
+import datetime
+from gp_comp.src.selection import tournament_selection
+from gp_comp.src.crossover import standard_crossover
+from gp_comp.src.mutation import standard_mutation
+from gp_comp.src.gp_node import GPNode
+from gp_comp.src.timer import CompositionTimer
+from dataclasses import dataclass
 
-from gp_comp.example.classes.model import Model
-from gp_comp.src.evo_operators import tournament_selection, standard_crossover, \
-    standard_mutation
-from gp_comp.src.gp_node import GP_Node
-from gp_comp.src.treedrawing import TreeDrawing
 
-
+@dataclass
 class ComposerRequirements:
-    def __init__(self, primary: List[Model], secondary: List[Model],
-                 max_depth: Optional[int] = None,
-                 max_arity: Optional[int] = None,
-                 is_visualise: bool = False):
-        self.primary = primary
-        self.secondary = secondary
-        self.max_depth = max_depth
-        self.max_arity = max_arity
-        self.is_visualise = is_visualise
+    primary: List[Any]
+    secondary: List[Any]
+    max_lead_time: Optional[datetime.timedelta] = datetime.timedelta(minutes=10)
+    max_depth: Optional[int] = None
+    max_arity: Optional[int] = None
 
-
+@dataclass
 class GPComposerRequirements(ComposerRequirements):
-    def __init__(self, primary: List[Model], secondary: List[Model],
-                 max_depth: Optional[SupportsInt], max_arity: Optional[SupportsInt], pop_size: Optional[SupportsInt],
-                 num_of_generations: SupportsInt, crossover_prob: Optional[SupportsFloat],
-                 mutation_prob: Optional[SupportsFloat] = None):
-        super().__init__(primary=primary, secondary=secondary,
-                         max_arity=max_arity, max_depth=max_depth)
-        self.pop_size = pop_size
-        self.num_of_generations = num_of_generations
-        self.crossover_prob = crossover_prob
-        self.mutation_prob = mutation_prob
+    pop_size: Optional[int] = 50
+    num_of_generations: Optional[int] = 50
+    crossover_prob: Optional[float] = None
+    mutation_prob: Optional[float] = None
 
 
 class GPChainOptimiser:
     def __init__(self, initial_chain, requirements, primary_node_func: Callable, secondary_node_func: Callable):
         self.requirements = requirements
-        self.__primary_node_func = primary_node_func
-        self.__secondary_node_func = secondary_node_func
+        self.primary_node_func = primary_node_func
+        self.secondary_node_func = secondary_node_func
+        self.best_individual = None
+        self.best_fitness = None
+
         if initial_chain and type(initial_chain) != list:
             self.population = [initial_chain] * requirements.pop_size
         else:
             self.population = initial_chain or self._make_population(self.requirements.pop_size)
 
-        TreeDrawing().draw_branch(node=self.population[1], jpeg="tree.png")
-
     def optimise(self, metric_function_for_nodes):
-        history = []
-        for generation_num in range(self.requirements.num_of_generations):
-            print("GP generation num:\n", generation_num)
+
+        with CompositionTimer() as t:
+
+            history = []
             self.fitness = [round(metric_function_for_nodes(tree_root), 3) for tree_root in self.population]
+            [history.append((self.population[ind_num], self.fitness[ind_num])) for ind_num in
+             range(self.requirements.pop_size)]
 
-            self.best_individual = self.population[np.argmin(self.fitness)]
+            for generation_num in range(self.requirements.num_of_generations - 1):
+                print(f'GP generation num: {generation_num}')
+                best_ind_num = np.argmin(self.fitness)
+                self.best_individual = deepcopy(self.population[best_ind_num])
+                self.best_fitness = self.fitness[best_ind_num]
+                selected_individuals = tournament_selection(self.fitness, self.population)
 
-            selected_indexes = tournament_selection(fitnesses=self.fitness,
-                                                    group_size=5)
-            new_population = []
-            for ind_num in range(self.requirements.pop_size - 1):
-                new_population.append(standard_crossover(tree1=self.population[selected_indexes[ind_num][0]],
-                                                         tree2=self.population[selected_indexes[ind_num][1]],
-                                                         max_depth=self.requirements.max_depth, pair_num=ind_num,
-                                                         pop_num=generation_num,
-                                                         crossover_prob=self.requirements.crossover_prob))
+                for ind_num in range(self.requirements.pop_size):
 
-                new_population[ind_num] = standard_mutation(new_population[ind_num],
-                                                            secondary_requirements=self.requirements.secondary,
-                                                            primary_requirements=self.requirements.primary)
+                    if ind_num == self.requirements.pop_size - 1:
+                        self.population[ind_num] = deepcopy(self.best_individual)
+                        self.fitness[ind_num] = self.best_fitness
+                        history.append((self.population[ind_num], self.fitness[ind_num]))
+                        break
 
-                new_metric_value = round(metric_function_for_nodes(new_population[ind_num]), 3)
-                history.append((new_population[ind_num], new_metric_value))
+                    self.population[ind_num] = standard_crossover(*selected_individuals[ind_num],
+                                                                  crossover_prob=self.requirements.crossover_prob,
+                                                                  max_depth=self.requirements.max_depth)
 
-            self.population = deepcopy(new_population)
-            self.population.append(self.best_individual)
+                    self.population[ind_num] = standard_mutation(root_node=self.population[ind_num],
+                                                                 secondary=self.requirements.secondary,
+                                                                 primary=self.requirements.primary,
+                                                                 secondary_node_func=self.secondary_node_func,
+                                                                 primary_node_func=self.primary_node_func,
+                                                                 mutation_prob=self.requirements.mutation_prob)
 
-        return self.best_individual, history
+                    self.fitness[ind_num] = round(metric_function_for_nodes(self.population[ind_num]), 3)
 
-    def _make_population(self, pop_size) -> List[GP_Node]:
+                    history.append((self.population[ind_num], self.fitness[ind_num]))
+
+                if t.is_max_time_reached(self.requirements.max_lead_time, generation_num):
+                    break
+
+        return self.population[np.argmin(self.fitness)], history
+
+    def _make_population(self, pop_size: int) -> List[GPNode]:
         return [self._random_tree() for _ in range(pop_size)]
 
-    def _random_tree(self) -> GP_Node:
-        root = self.__secondary_node_func(choice(self.requirements.secondary_requirements))
+    def _random_tree(self) -> GPNode:
+        root = GPNode(chain_node=self.secondary_node_func(model=choice(self.requirements.secondary)))
+        new_tree = root
         self._tree_growth(node_parent=root)
-        return root
+        return new_tree
 
-    def _tree_growth(self, node_parent):
+    def _tree_growth(self, node_parent: Any):
         offspring_size = randint(2, self.requirements.max_arity)
-        node_offspring = []
+        offspring_nodes = []
         for offspring_node in range(offspring_size):
-            if node_parent.get_depth_up() >= self.requirements.max_depth or (
-                    node_parent.get_depth_up() < self.requirements.max_depth
+            if node_parent.height >= self.requirements.max_depth - 1 or (
+                    node_parent.height < self.requirements.max_depth - 1
                     and randint(0, 1)):
-                new_node = self.__primary_node_func(choice(self.requirements.primary_requirements),
-                                                    nodes_to=node_parent, input_data=None)
-                node_offspring.append(new_node)
+
+                new_node = GPNode(
+                    chain_node=self.primary_node_func(model=choice(self.requirements.primary), input_data=None),
+                    node_to=node_parent)
+                offspring_nodes.append(new_node)
             else:
-                new_node = self.__secondary_node_func(choice(self.requirements.secondary_requirements),
-                                                      nodes_to=node_parent)
+                new_node = GPNode(chain_node=self.secondary_node_func(model=choice(self.requirements.secondary)),
+                                  node_to=node_parent)
                 self._tree_growth(new_node)
-                node_offspring.append(new_node)
-        node_parent.nodes_from = node_offspring
+                offspring_nodes.append(new_node)
+        node_parent.nodes_from = offspring_nodes
