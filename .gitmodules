@@ -1,3 +1,3 @@
-[submodule "Bayesian-synthetic-generator"]
-	path = Bayesian-synthetic-generator
-	url = https://github.com/ITMO-NSS-team/Bayesian-synthetic-generator.git
+[submodule "bayesian-synthetic-generator"]
+	path = bayesian-synthetic-generator
+	url = https://github.com/ITMO-NSS-team/bayesian-synthetic-generator.git
