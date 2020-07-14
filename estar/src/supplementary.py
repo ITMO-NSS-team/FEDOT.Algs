@@ -7,6 +7,54 @@ Created on Thu Feb 13 16:33:34 2020
 """
 
 import numpy as np
+import copy
+
+
+def Detect_Similar_Terms(base_equation_1, base_equation_2):
+    equation_1 = copy.deepcopy(base_equation_1); equation_2 = copy.deepcopy(base_equation_2)
+    same_terms_from_eq1 = []
+    same_terms_from_eq2 = []    
+    
+    similar_terms_from_eq1 = []
+    similar_terms_from_eq2 = []
+    
+    different_terms_from_eq1 = []
+    different_terms_from_eq2 = []
+    
+#    print('Base terms:', [[(token.label, token.params) for token in term.gene] for term in base_equation_1.terms])
+#    print('Copy terms:', [[(token.label, token.params) for token in term.gene] for term in equation_1.terms])
+    
+    
+    for eq1_term in base_equation_1.terms:     
+        for eq2_term in equation_2.terms:
+            if eq1_term == eq2_term:
+                same_terms_from_eq1.append(eq1_term); same_terms_from_eq2.append(eq2_term);
+                equation_1.terms.remove(eq1_term); equation_2.terms.remove(eq2_term); break
+            elif set([token.label for token in eq1_term.gene]) == set([token.label for token in eq2_term.gene]) and len(eq1_term.gene) == len(eq2_term.gene):
+                similar_terms_from_eq1.append(eq1_term); similar_terms_from_eq2.append(eq2_term); 
+                equation_1.terms.remove(eq1_term)
+                equation_2.terms.remove(eq2_term); break
+
+    for term_idx in np.arange(len(equation_1.terms)):
+        different_terms_from_eq1.append(equation_1.terms[term_idx]); different_terms_from_eq2.append(equation_2.terms[term_idx])
+    return [same_terms_from_eq1, similar_terms_from_eq1, different_terms_from_eq1], [same_terms_from_eq2, similar_terms_from_eq2, different_terms_from_eq2]
+        
+
+def Filter_powers(gene):
+    gene_filtered = []
+    for token_idx in range(len(gene)):
+        total_power = gene.count(gene[token_idx])
+        powered_token = copy.deepcopy(gene[token_idx])
+        powered_token.params['power'] = total_power
+        if powered_token not in gene_filtered:
+            gene_filtered.append(powered_token)
+    return gene_filtered
+
+def Bind_Params(zipped_params):
+    param_dict = {}
+    for token_props in zipped_params:
+        param_dict[token_props[0]] = token_props[1]
+    return param_dict
 
 def Slice_Data_3D(matrix, part = 4, part_tuple = None):     # Input matrix slicing for separate domain calculation
     if part_tuple:
@@ -21,7 +69,7 @@ def Slice_Data_3D(matrix, part = 4, part_tuple = None):     # Input matrix slici
                          j*int(matrix.shape[2]/float(part_dim)):(j+1)*int(matrix.shape[2]/float(part_dim))], i, j
 
 def Define_Derivatives(dimensionality, max_order = 2):
-    var_names = ['1', 'u']
+    var_names = ['u']
     for var_idx in range(dimensionality):
         for order in range(max_order):
             if order == 0:
@@ -31,7 +79,7 @@ def Define_Derivatives(dimensionality, max_order = 2):
     return tuple(var_names)    
 
 def Create_Var_Matrices(U_input, max_order = 3):
-    var_names = ['1', 'u']
+    var_names = ['u']
 
     for var_idx in range(U_input.ndim):
         for order in range(max_order):

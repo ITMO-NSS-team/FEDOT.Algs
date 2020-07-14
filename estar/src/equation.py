@@ -7,13 +7,16 @@ Created on Thu Feb 13 16:43:10 2020
 """
 
 import numpy as np
+import copy
+from functools import reduce
 from sklearn.linear_model import LinearRegression, Lasso, Ridge 
-from src.term import Term
+from abc import ABC, abstractmethod
 
+from src.term import Term
 from src.term import Check_Unqueness
 
-class Equation:
-    def __init__(self, tokens, token_params, evaluator, eval_args, basic_terms, alpha = 1, terms_number = 6, max_factors_in_term = 2): 
+class Equation(object):
+    def __init__(self, tokens, basic_terms, terms_number = 6, max_factors_in_term = 2): 
 
         """
 
@@ -53,72 +56,47 @@ class Equation:
 
         """
 
-        self.alpha = alpha
         self.n_immutable = len(basic_terms)
-        self.tokens = tokens; self.token_params = token_params
-        self.evaluator = evaluator; self.eval_args = eval_args
+        self.tokens = tokens
         self.terms = []
         self.terms_number = terms_number; self.max_factors_in_term = max_factors_in_term
-        if (terms_number <= 5): 
-            raise Exception('Number of terms ({}) is too low to contain all required ones'.format(terms_number))        
+        if (terms_number < self.n_immutable): 
+            raise Exception('Number of terms ({}) is too low to contain all mandatory ones'.format(terms_number))        
             
-        self.terms.extend([Term(tokens=tokens, token_params = self.token_params, label_dict = label, 
-                                max_factors_in_term = self.max_factors_in_term) for label in basic_terms])
-        
-        for i in range(len(basic_terms), terms_number):
-            new_term = Term(tokens = self.tokens, token_params = self.token_params, init_random = True, 
-                            max_factors_in_term = self.max_factors_in_term)
+        self.terms.extend([Term(self.tokens, passed_term = label, max_factors_in_term = self.max_factors_in_term) for label in basic_terms])
 
-            while not Check_Unqueness(new_term, self.terms):
-                new_term = Term(tokens = self.tokens, token_params = self.token_params, init_random = True, 
-                                max_factors_in_term = self.max_factors_in_term)
+        for i in range(len(basic_terms), terms_number):
+            check_test = 0
+            while True:
+                check_test += 1 
+                new_term = Term(self.tokens, max_factors_in_term = self.max_factors_in_term, passed_term = None)
+                if Check_Unqueness(new_term, self.terms):
+                    break
             self.terms.append(new_term)
 
-    def Evaluate_equation(self):
-        self.target = self.terms[self.target_idx].Evaluate(self.evaluator, True, self.eval_args)
+
+    def __eq__(self, other):
+        if all([any([self_term == other_term for other_term in other.terms]) for self_term in self.terms]):
+            return True
+        else:
+            return False
+
+
+    def Evaluate_equation(self, normalize = True):
+        self.target = self.terms[self.target_idx].Evaluate(normalize)
         
         for feat_idx in range(len(self.terms)):
             if feat_idx == 0:
-                self.features = self.terms[feat_idx].Evaluate(self.evaluator, True, self.eval_args)
+                self.features = self.terms[feat_idx].Evaluate(normalize)
             elif feat_idx != 0 and self.target_idx != feat_idx:
-                temp = self.terms[feat_idx].Evaluate(self.evaluator, True, self.eval_args)
+                temp = self.terms[feat_idx].Evaluate(normalize)
                 self.features = np.vstack([self.features, temp])
             else:
                 continue
         self.features = np.transpose(self.features)
-        #print(self.features.shape)
-
-    def Apply_ML(self, estimator_type = 'Lasso'): # Apply estimator to get weights of the equation
-        self.Fit_estimator(estimator_type = estimator_type)
-            
         
-    def Fit_estimator(self, estimator_type = 'Ridge'): # Fitting selected estimator
-        if estimator_type == 'Lasso':
-            self.estimator = Lasso(alpha = self.alpha, copy_X=True, fit_intercept=True, max_iter=1000,
-                                   normalize=False, positive=False, precompute=False, random_state=None,
-                                   selection='cyclic', tol=0.0001, warm_start=False)
-            self.estimator.fit(self.features, self.target) 
-        elif estimator_type == 'Ridge':
-            self.estimator = Ridge(alpha = self.alpha)
-            self.estimator.fit(self.features, self.target) 
-        else:
-            self.estimator = LinearRegression()
-            self.estimator.fit(self.features, self.target) 
-        self.weights = self.estimator.coef_
-    
-    
-    def Calculate_Fitness(self, penalty_coeff = 0.4): # Calculation of fitness function as the inverse value of L2 norm of error
-        # Evaluate target & features
-        self.Evaluate_equation()
-        self.Apply_ML()
-        self.fitness_value = 1 / (np.linalg.norm(np.dot(self.features, self.weights) - self.target, ord = 2) + 
-                                  self.alpha * np.linalg.norm(self.weights, ord = 1)) 
-        if np.sum(self.weights) == 0:
-            self.fitness_value = self.fitness_value * penalty_coeff
-        return self.fitness_value
 
-        
-    def Split_data(self): 
+    def Split_data(self, target_idx = None): 
         
         '''
         
@@ -126,37 +104,42 @@ class Equation:
         
         '''
         
-        self.target_idx = np.random.randint(low = 1, high = len(self.terms)-1)
-        self.allowed_derivs = np.ones(len(self.tokens))
-
-        for idx in range(1, self.allowed_derivs.size):
-            if self.terms[self.target_idx].gene[idx * self.terms[self.target_idx].n_params + 
-                          list(self.terms[self.target_idx].token_params.keys()).index('power')] >= 1: self.allowed_derivs[idx] = 0
+        self.target_idx = target_idx if type(target_idx) != type(None) else np.random.randint(low = 1, high = len(self.terms)-1)
         
-        for feat_idx in range(len(self.terms)): # \
+                           
+        for feat_idx in range(len(self.terms)):
             if feat_idx == 0:
                 continue
             elif feat_idx != 0 and self.target_idx != feat_idx:
-                self.terms[feat_idx].Remove_Dublicated_Factors(self.allowed_derivs, self.terms[:feat_idx]+self.terms[feat_idx+1:])
+                self.terms[feat_idx].Remove_Dublicated_Factors(self.forbidden_token_labels, self.terms[:feat_idx]+self.terms[feat_idx+1:])
             else:
-                continue
-
-    def Mutate(self, r_mutation = 0.5, r_param_mutation = 0.5, strict_restrictions = False):
-        power_idx = list(self.terms[self.target_idx].token_params.keys()).index('power')
-        forbidden_tokens = np.nonzero([self.terms[self.target_idx].gene[idx*self.terms[self.target_idx].n_params + power_idx] for 
-                                       idx in np.arange(len(self.tokens))])[0]
-        #print('tokens in target:', forbidden_tokens)
-        for i in range(self.n_immutable, len(self.terms)):
-            if np.random.uniform(0, 1) <= r_mutation and i != self.target_idx:
-                if np.random.random() < 1/pow(len(self.token_params), 2): # Сомнительная эвристика
-                    new_term = Term(tokens = self.tokens, token_params = self.token_params, init_random = True, 
-                                    max_factors_in_term = self.max_factors_in_term, forbidden_tokens = forbidden_tokens)
+                continue        
+     
         
-                    while not Check_Unqueness(new_term, self.terms[:i] + self.terms[i+1:]):
-                        new_term = Term(tokens = self.tokens, token_params = self.token_params, init_random = True, 
-                                        max_factors_in_term = self.max_factors_in_term, forbidden_tokens = forbidden_tokens)
-                    self.terms[i] = new_term
-                else:
-                    self.terms[i].Mutate_parameters(r_param_mutation = r_param_mutation, strict_restrictions = strict_restrictions)
-                
-        self.Calculate_Fitness()
+#    def Show_terms(self):
+#        for term in self.terms:
+#            print([(factor.label, factor.params) for factor in term.gene])             
+        
+    @property 
+    def forbidden_token_labels(self):
+        target_symbolic = [factor.label for factor in self.terms[self.target_idx].gene]
+        forbidden_tokens = set()
+
+        for token_family in self.tokens:
+            for token in token_family.tokens:
+                if token in target_symbolic and token_family.status['unique_for_right_part']:
+                    forbidden_tokens.add(token)        
+#        print(forbidden_tokens)
+        return forbidden_tokens
+        
+    @property
+    def text_form(self):
+        form = ''
+        for term_idx in range(len(self.terms)):
+            if term_idx != self.target_idx:
+                form += str(self.weights[term_idx]) if term_idx < self.target_idx else str(self.weights[term_idx-1])
+                form += ' * ' + self.terms[term_idx].text_form + ' + '
+#            if term_idx < len(self.terms) - 1:
+        form += 'const = ' + self.terms[self.target_idx].text_form
+        return form
+    

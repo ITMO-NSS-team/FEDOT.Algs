@@ -9,110 +9,130 @@ Created on Thu Feb 13 16:26:03 2020
 import numpy as np
 import copy 
 from sklearn.linear_model import LinearRegression
+from functools import reduce
+from abc import ABC, abstractmethod
 
 from src.term import Check_Unqueness
 from src.equation import Equation
 from src.supplementary import *
+from src.supplementary import Detect_Similar_Terms
+
 
 class Population:
-    def __init__(self, evaluator, eval_params, tokens, token_params, pop_size, basic_terms, a_proc,
-                 r_crossover, r_param_mutation, r_mutation, mut_chance, alpha, eq_len = 8, max_factors_in_terms = 3): 
+    def __init__(self, evol_operator, tokens, pop_size, basic_terms,
+                 eq_len = 8, max_factors_in_terms = 3): 
         
-        self.tokens = tokens; self.token_params = token_params
-        
-        self.part_with_offsprings = a_proc
-        self.crossover_probability = r_crossover; self.r_param_mutation = r_param_mutation
-        self.r_mutation = r_mutation; self.mut_chance = mut_chance
-        self.n_params = len(list(token_params.keys()))
+        self.evol_operator = evol_operator
+        self.tokens = tokens
 
         self.pop_size = pop_size
-        self.population = [Equation(self.tokens, self.token_params, evaluator, eval_params, basic_terms, alpha, eq_len, max_factors_in_terms) for i in range(pop_size)]
+        self.population = [Equation(self.tokens, basic_terms, eq_len, max_factors_in_terms) for i in range(pop_size)]
         for eq in self.population:
             eq.Split_data()
-            eq.Calculate_Fitness()
+            evol_operator.get_fitness(eq)
 
-    def Genetic_Iteration(self, estimator_type, elitism = 1, strict_restrictions = True):
+
+    def Genetic_Iteration(self, iter_index, strict_restrictions = True):
         self.population = Population_Sort(self.population)
         self.population = self.population[:self.pop_size]
-                
-        children = Tournament_crossover(self.population, self.part_with_offsprings, self.tokens, 
-                                        crossover_probability = self.crossover_probability)
+        print(iter_index, self.population[0].fitness_value)
+        
+#        if iter_index > 0:
+#            if self.population[0] != self.prev_population[0]:
+#                self.Calculate_True_Weights(False)
+#                print(self.text_form())
+        
+        if iter_index > 0: 
+            del self.prev_population
+        self.prev_population = copy.deepcopy(self.population) # deepcopy?
 
-        map(lambda x: x.Split_data, children)
-        map(lambda x: x.Calculate_Fitness, children)
-        self.population = self.population + children
-
-        for i in range(elitism, len(self.population)):
-            if np.random.random() <= self.mut_chance:
-                self.population[i].Mutate(r_mutation = self.r_mutation, 
-                               r_param_mutation = self.r_param_mutation, strict_restrictions = strict_restrictions)
+        self.population = self.evol_operator.apply(self.population)
 
 
-    def Initiate_Evolution(self, iter_number, estimator_type, log_file = None, test_indicators = False):
+    def Initiate_Evolution(self, iter_number, log_file = None, test_indicators = True):
+        if test_indicators:
+            print('Evolution performed with intermediate indicators')
         self.fitness_values = np.empty(iter_number)
         for idx in range(iter_number):
             strict_restrictions = False if idx < iter_number - 1 else True
-            self.Genetic_Iteration(estimator_type = estimator_type, strict_restrictions = strict_restrictions)
+            self.Genetic_Iteration(idx, strict_restrictions = strict_restrictions)
             self.population = Population_Sort(self.population)
             self.fitness_values[idx]= self.population[0].fitness_value
             if log_file: log_file.Write_apex(self.population[0], idx)
             if test_indicators: 
                 print('iteration %3d' % idx)
                 print('best fitness:', self.population[0].fitness_value, ', worst_fitness', self.population[-1].fitness_value)
-                print('gene of target term:', self.population[0].terms[self.population[0].target_idx].gene)
                 print('weights:', self.population[0].weights)
         return self.fitness_values
 
-    def Calculate_True_Weights(self, evaluator, eval_params):
-        self.population = Population_Sort(self.population)
-        self.population = self.population[:self.pop_size]
-#        print('Final gene:', self.population[0].terms[self.population[0].target_idx].gene)
-#        print(self.population[0].fitness_value, Decode_Gene(self.population[0].terms[self.population[0].target_idx].gene,
-#              self.tokens, list(self.token_params.keys()), self.n_params))
-#        print('weights:', self.population[0].weights)       
-        self.target_term, self.zipped_list = Get_true_coeffs(evaluator, eval_params, self.tokens, list(self.token_params.keys()),
-                                                              self.population[0], self.n_params)  
+
+    def Calculate_True_Weights(self, sort = True):
+        if sort:
+            self.population = Population_Sort(self.population)
+        self.final_weights = Get_true_coeffs(self.tokens, self.population[0])
         
-def Crossover(equation_1, equation_2, tokens, crossover_probability = 0.1):
-    if len(equation_1.terms) != len(equation_2.terms):
-        raise IndexError('Equations have diffferent number of terms')
-    result_equation_1 = copy.deepcopy(equation_1) #Equation(variables, variables_names, terms_number = len(equation_1.terms))
-    result_equation_2 = copy.deepcopy(equation_2) #Equation(variables, variables_names, terms_number = len(equation_2.terms))      
-
-    for i in range(2, len(result_equation_1.terms)):
-        if np.random.uniform(0, 1) <= crossover_probability and Check_Unqueness(result_equation_1.terms[i], result_equation_2.terms) and Check_Unqueness(result_equation_2.terms[i], result_equation_1.terms):
-            internal_term = result_equation_1.terms[i]
-            result_equation_1.terms[i] = result_equation_2.terms[i]
-            result_equation_2.terms[i] = internal_term
-
-    return result_equation_1, result_equation_2
-
-
-def Parent_selection_for_crossover(population, tournament_groups = 2):
-    selection_indexes = np.random.choice(len(population), tournament_groups, replace = False)
-    candidates = [population[idx] for idx in selection_indexes]
-    parent_idx = [idx for _, idx in sorted(zip(candidates, selection_indexes), key=lambda pair: pair[0].fitness_value)][-1] #np.argmax([population[y].fitness_value for y in selection_indexes])
-    parent = population[parent_idx]
-    return parent, parent_idx
+    
+    def text_form(self, with_zero_weights = False):
+        if type(self.final_weights) == type(None):
+            raise Exception('Trying to get the precise equation before applying final linear regression')
+        
+        form = ''
+        for term_idx in range(len(self.population[0].terms)):
+            if term_idx != self.population[0].target_idx:
+                weight = self.final_weights[term_idx] if term_idx < self.population[0].target_idx else self.final_weights[term_idx-1]
+                if weight != 0. or with_zero_weights:    
+                    form += str(weight) + ' * ' + self.population[0].terms[term_idx].text_form + ' + '
+        form += str(self.final_weights[-1]) + ' = ' + self.population[0].terms[self.population[0].target_idx].text_form
+        return form
 
 
-def Tournament_crossover(population, part_with_offsprings, tokens, 
-                         tournament_groups = 2, crossover_probability = 0.1):
-    children = []
-    for i in range(int(len(population)*part_with_offsprings)):
-        parent_1, parent_1_idx = Parent_selection_for_crossover(population, tournament_groups)
-        parent_2, parent_2_idx = Parent_selection_for_crossover(population, tournament_groups)
-        child_1, child_2 =  Crossover(parent_1, parent_2, tokens,
-                                                       crossover_probability = crossover_probability)
-        child_1.Split_data(); child_2.Split_data()
-        children.append(child_1); children.append(child_2)
-    return children        
-
-
-def Get_true_coeffs(evaluator, eval_params, tokens, token_params, equation, n_params = 2):
+def Get_true_coeffs(tokens, equation): # Не забыть про то, что последний коэф - для константы
     target = equation.terms[equation.target_idx]
 
-    target_vals = target.Evaluate(evaluator, False, eval_params)    
+    target_vals = target.Evaluate(False)
+    features_vals = []
+    nonzero_features_indexes = []
+    for i in range(len(equation.terms)):
+        if i == equation.target_idx:
+            continue
+        idx = i if i < equation.target_idx else i-1
+        if equation.weights[idx] != 0:
+            features_vals.append(equation.terms[i].Evaluate(False))
+            nonzero_features_indexes.append(idx)
+            
+    print('Indexes of nonzero elements:', nonzero_features_indexes)
+    if len(features_vals) == 0:
+        return np.zeros(len(equation.terms)) #Bind_Params([(token.label, token.params) for token in target.gene]), [('0', 1)]
+    
+    features = features_vals[0]
+    if len(features_vals) > 1:
+        for i in range(1, len(features_vals)):
+            features = np.vstack([features, features_vals[i]])
+    features = np.vstack([features, np.ones(features_vals[0].shape)]) # Добавляем константную фичу
+    features = np.transpose(features)  
+    
+    estimator = LinearRegression(fit_intercept=False)
+    try:
+        estimator.fit(features, target_vals)
+    except ValueError:
+        features = features.reshape(-1, 1)
+        estimator.fit(features, target_vals)
+        
+    valueable_weights = estimator.coef_
+    weights = np.zeros(len(equation.terms))
+#    print()
+    for weight_idx in range(len(weights)-1):
+        if weight_idx in nonzero_features_indexes:
+            weights[weight_idx] = valueable_weights[nonzero_features_indexes.index(weight_idx)]
+    weights[-1] = valueable_weights[-1]
+    
+    return weights #target, list(zip(features_list_labels, weights))    
+
+
+def Get_true_coeffs_old(tokens, equation):
+    target = equation.terms[equation.target_idx]
+
+    target_vals = target.Evaluate(False)
     features_list = []
     features_list_labels = []
     for i in range(len(equation.terms)):
@@ -120,23 +140,61 @@ def Get_true_coeffs(evaluator, eval_params, tokens, token_params, equation, n_pa
             continue
         idx = i if i < equation.target_idx else i-1
         if equation.weights[idx] != 0:
-            features_list_labels.append(Decode_Gene(equation.terms[i].gene, tokens, token_params, n_params))
-            features_list.append(equation.terms[i].Evaluate(evaluator, False, eval_params))
+            features_list_labels.append(equation.terms[i])
+            features_list.append(equation.terms[i].Evaluate(False))
+
 
     if len(features_list) == 0:
-        return Decode_Gene(target.gene, tokens, token_params, n_params), [('0', 1)]
+        return Bind_Params([(token.label, token.params) for token in target.gene]), [('0', 1)]
     
     features = features_list[0]
     if len(features_list) > 1:
         for i in range(1, len(features_list)):
             features = np.vstack([features, features_list[i]])
+    features = np.vstack([features, np.ones(features_list[0].shape)]) # Добавляем константную фичу
+    features_list_labels.append({'1':{'power':1}})
     features = np.transpose(features)  
     
-    estimator = LinearRegression()
+    estimator = LinearRegression(fit_intercept=False)
     try:
         estimator.fit(features, target_vals)
     except ValueError:
         features = features.reshape(-1, 1)
         estimator.fit(features, target_vals)
     weights = estimator.coef_
-    return Decode_Gene(target.gene, tokens, token_params, n_params), list(zip(features_list_labels, weights))    
+    return target, list(zip(features_list_labels, weights))    
+
+#def Get_true_coeffs(evaluator, eval_params, tokens, token_params, equation, n_params = 2):
+#    target = equation.terms[equation.target_idx]
+#
+#    target_vals = target.Evaluate(False)
+#    features_list = []
+#    features_list_labels = []
+#    for i in range(len(equation.terms)):
+#        if i == equation.target_idx:
+#            continue
+#        idx = i if i < equation.target_idx else i-1
+#        if equation.weights[idx] != 0:
+#            features_list_labels.append(Bind_Params([(token.label, token.params) for token in equation.terms[i].gene]))
+#            features_list.append(equation.terms[i].Evaluate(False))
+#
+#
+#    if len(features_list) == 0:
+#        return Bind_Params([(token.label, token.params) for token in target.gene]), [('0', 1)]
+#    
+#    features = features_list[0]
+#    if len(features_list) > 1:
+#        for i in range(1, len(features_list)):
+#            features = np.vstack([features, features_list[i]])
+#    features = np.vstack([features, np.ones(features_list[0].shape)]) # Добавляем константную фичу
+#    features_list_labels.append({'1':{'power':1}})
+#    features = np.transpose(features)  
+#    
+#    estimator = LinearRegression(fit_intercept=False)
+#    try:
+#        estimator.fit(features, target_vals)
+#    except ValueError:
+#        features = features.reshape(-1, 1)
+#        estimator.fit(features, target_vals)
+#    weights = estimator.coef_
+#    return Bind_Params([(token.label, token.params) for token in target.gene]), list(zip(features_list_labels, weights))    
