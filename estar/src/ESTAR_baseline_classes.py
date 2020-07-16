@@ -320,6 +320,7 @@ class Baseline_mutation(Specific_Operator):
                         equation.terms[term_idx] = mut_operator.apply(term_idx, equation)
                 self.suboperators['Coeff_calc'].apply(equation)
                 self.suboperators['Fitness_eval'].apply(equation)
+                equation.Split_data()
                 population[indiv_idx] = equation
         return population        
 
