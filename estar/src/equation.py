@@ -82,14 +82,15 @@ class Equation(object):
             return False
 
 
-    def Evaluate_equation(self, normalize = True):
+    def Evaluate_equation(self, normalize = True): # ФИКСИТЬ
         self.target = self.terms[self.target_idx].Evaluate(normalize)
-        
-        for feat_idx in range(len(self.terms)):
+        feature_indexes = list(range(len(self.terms)))
+        feature_indexes.remove(self.target_idx)
+        for feat_idx in range(len(feature_indexes)):
             if feat_idx == 0:
-                self.features = self.terms[feat_idx].Evaluate(normalize)
-            elif feat_idx != 0 and self.target_idx != feat_idx:
-                temp = self.terms[feat_idx].Evaluate(normalize)
+                self.features = self.terms[feature_indexes[feat_idx]].Evaluate(normalize)
+            elif feat_idx != 0:# and self.target_idx != feat_idx:
+                temp = self.terms[feature_indexes[feat_idx]].Evaluate(normalize)
                 self.features = np.vstack([self.features, temp])
             else:
                 continue
@@ -104,17 +105,19 @@ class Equation(object):
         
         '''
         
-        self.target_idx = target_idx if type(target_idx) != type(None) else np.random.randint(low = 1, high = len(self.terms)-1)
-        
+        self.target_idx = target_idx if type(target_idx) != type(None) else np.random.randint(low = 0, high = len(self.terms)-1)
+#        print('before:', [term.text_form for term in self.terms])
+#        print('target:', self.terms[self.target_idx].text_form)
+#        print(self.forbidden_token_labels)
                            
         for feat_idx in range(len(self.terms)):
-            if feat_idx == 0:
-                continue
-            elif feat_idx != 0 and self.target_idx != feat_idx:
+            if self.target_idx != feat_idx:
+#                print('feature:', feat_idx)#, 'tokens:', [token.tokens for token in self.terms[feat_idx].available_tokens])
                 self.terms[feat_idx].Remove_Dublicated_Factors(self.forbidden_token_labels, self.terms[:feat_idx]+self.terms[feat_idx+1:])
             else:
                 continue        
-     
+
+#        print('after:', [term.text_form for term in self.terms])     
         
 #    def Show_terms(self):
 #        for term in self.terms:

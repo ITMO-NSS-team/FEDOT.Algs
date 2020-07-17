@@ -279,21 +279,26 @@ class Evolutionary_operator():
             raise ValueError('No method to calculate the weights of the equation is defined.')
         
         
-    def apply(self, population):
+    def apply(self, population, show_operations = False):
         '''
         
-        Apply operator to the .
+        Apply operator to the popuation.
         '''
                 
-        print(type(population))
+        #print(type(population))
         self.check_correctness()
         if type(self.crossover) != type(None):
             population = self.crossover.apply(population)
+            if show_operations:
+                print('performed crossover')
         if type(self.mutation) != type(None):
+            if show_operations:
+                print('performed mutation')
             population = self.mutation.apply(population)
         if type(self.param_optimization) != type(None):
-            population = self.param_optimization.apply(population)
-#        print(type(population))
+            if show_operations:
+                print('performed parameter optimization')
+                population = self.param_optimization.apply(population)
         return population
 
         

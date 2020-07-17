@@ -24,11 +24,6 @@ def set_argument(var, fun_kwargs, base_value):
 
 
 def discover_Equation(tokens, evolutionary_operator, basic_terms, **kwargs): 
-    '''
-
-
-
-    '''
     t1 = datetime.datetime.now()
     
     iter_number = set_argument('iter_number', kwargs, 100)

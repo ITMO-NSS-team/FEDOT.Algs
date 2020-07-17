@@ -9,7 +9,7 @@ Created on Wed Jun 17 17:48:54 2020
 import numpy as np
 from copy import deepcopy
 from functools import reduce
-from sklearn.linear_model import Lasso
+from sklearn.linear_model import Lasso, LinearRegression
 
 
 from src.term import Check_Unqueness
@@ -320,7 +320,7 @@ class Baseline_mutation(Specific_Operator):
                         equation.terms[term_idx] = mut_operator.apply(term_idx, equation)
                 self.suboperators['Coeff_calc'].apply(equation)
                 self.suboperators['Fitness_eval'].apply(equation)
-                equation.Split_data()
+#                equation.Split_data()
                 population[indiv_idx] = equation
         return population        
 
@@ -437,14 +437,63 @@ class Baseline_LASSO(Specific_Operator):
         ------------
         None
         """
+#        equation.Split_data()
         equation.Evaluate_equation()
         estimator = Lasso(alpha = self.params['sparcity'], copy_X=True, fit_intercept=True, max_iter=1000,
                                normalize=False, positive=False, precompute=False, random_state=None,
                                selection='cyclic', tol=0.0001, warm_start=False)
+#        estimator = Lasso(alpha = self.params['sparcity'], normalize=False)
+
         estimator.fit(equation.features, equation.target)
         equation.weights = estimator.coef_
+        if len(np.nonzero(estimator.coef_)[0]) == 1 and (1 - estimator.coef_[np.nonzero(estimator.coef_)[0][0]]) < 0.001:
+#            file_feature = str(equation.gene[estimator.coef_[0][0]].factors[0].label)
+            np.save('file_features', equation.features)
+            np.save('file_target', equation.target)
+            print(equation.text_form)
+            print(estimator.coef_)
+            raise ValueError()        
         
+def Get_True_Coefficients(equation):
+    target_vals = equation.terms[equation.target_idx].Evaluate(False)
+    features_vals = []
+    nonzero_features_indexes = []
+    for i in range(len(equation.terms)):
+        if i == equation.target_idx:
+            continue
+        idx = i if i < equation.target_idx else i-1
+        if equation.weights[idx] != 0:
+            features_vals.append(equation.terms[i].Evaluate(False))
+            nonzero_features_indexes.append(idx)
+            
+    #print('Indexes of nonzero elements:', nonzero_features_indexes)
+    if len(features_vals) == 0:
+        return np.zeros(len(equation.terms)) #Bind_Params([(token.label, token.params) for token in target.gene]), [('0', 1)]
+    
+    features = features_vals[0]
+    if len(features_vals) > 1:
+        for i in range(1, len(features_vals)):
+            features = np.vstack([features, features_vals[i]])
+    features = np.vstack([features, np.ones(features_vals[0].shape)]) # Добавляем константную фичу
+    features = np.transpose(features)  
+    
+    estimator = LinearRegression(fit_intercept=False)
+    try:
+        estimator.fit(features, target_vals)
+    except ValueError:
+        features = features.reshape(-1, 1)
+        estimator.fit(features, target_vals)
         
+    valueable_weights = estimator.coef_
+    weights = np.zeros(len(equation.terms))
+#    print()
+    for weight_idx in range(len(weights)-1):
+        if weight_idx in nonzero_features_indexes:
+            weights[weight_idx] = valueable_weights[nonzero_features_indexes.index(weight_idx)]
+    weights[-1] = valueable_weights[-1]
+    
+    return weights            
+
 class Baseline_fitness(Specific_Operator):
     """
     The operator, which calculates fitness function to the individual (equation).
@@ -477,6 +526,10 @@ class Baseline_fitness(Specific_Operator):
         ------------
         None
         """        
-        equation.fitness_value = 1 / (np.linalg.norm(np.dot(equation.features, equation.weights) - equation.target, ord = 2))# + self.alpha * np.linalg.norm(self.weights, ord = 1)) 
+        equation.Evaluate_equation(normalize = False)
+        
+        weights = Get_True_Coefficients(equation)   # Если заработает - настроить без лишних вычислений
+        equation.fitness_value = 1 / (np.linalg.norm(np.dot(equation.features, weights[:-1]) + np.full(equation.target.shape, weights[-1])
+        - equation.target, ord = 2))# + self.alpha * np.linalg.norm(self.weights, ord = 1)) 
         if np.sum(equation.weights) == 0:
             equation.fitness_value = equation.fitness_value * self.params['penalty_coeff']

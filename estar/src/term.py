@@ -158,13 +158,19 @@ class Term:
 
     def Remove_Dublicated_Factors(self, forbidden_terms, background_terms):
         cleared_num = 0
-        gene_cleared = copy.deepcopy(self.gene)
-        for factor in self.gene:
-            if factor.label in forbidden_terms:#set(reduce(lambda x, y: x.union(y), forbidden_terms.values())):
+#        print('before deleting:', self.text_form)
+        gene_cleared = [] #copy.deepcopy(self.gene)
+        for factor_idx in range(len(self.gene)):        # Переделать удаление в построение
+            if self.gene[factor_idx].label in forbidden_terms:#set(reduce(lambda x, y: x.union(y), forbidden_terms.values())):
+#                print('deleting', self.gene[factor_idx].label)
                 cleared_num += 1
-                gene_cleared.remove(factor)
+                #gene_cleared.remove(factor)
+            else:
+                gene_cleared.append(self.gene[factor_idx])
+#        print('after deleting:', [factor.label for factor in gene_cleared])
                 
         self.occupied_tokens_labels = forbidden_terms
+#        print([token.tokens for token in self.available_tokens])
         token_selection = self.available_tokens
 #        print(cleared_num, forbidden_terms, [token.tokens for token in token_selection])
         
@@ -177,6 +183,9 @@ class Term:
         filling_try = 0
         while True:
             filling_try += 1
+            if filling_try == 10:
+                cleared_num += 1
+                
             if filling_try == 100:
                 print('forbidden:', [token for token in forbidden_terms])
                 print('background:', [token.text_form for token in background_terms])
@@ -209,12 +218,13 @@ class Term:
              
             new_term = copy.deepcopy(self)
             new_term.gene = gene_filled
-            if Check_Unqueness(new_term, background_terms): 
+            if Check_Unqueness(new_term, background_terms):
+                del new_term
                 break 
 #        print('forbidden terms:', forbidden_terms)
 #        print('before', self.text_form)
 #        print('after', new_term.text_form)
-        self = new_term
+        self.gene = gene_filled
         
                 
     def Evaluate(self, normalize = True):

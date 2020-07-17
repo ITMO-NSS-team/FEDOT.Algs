@@ -36,7 +36,8 @@ class Population:
         self.population = Population_Sort(self.population)
         self.population = self.population[:self.pop_size]
         print(iter_index, self.population[0].fitness_value)
-        
+#        for equation in self.population:
+#            print(equation.text_form, equation.fitness_value)
 #        if iter_index > 0:
 #            if self.population[0] != self.prev_population[0]:
 #                self.Calculate_True_Weights(False)
@@ -72,7 +73,7 @@ class Population:
         self.final_weights = Get_true_coeffs(self.tokens, self.population[0])
         
     
-    def text_form(self, with_zero_weights = False):
+    def text_form(self, with_zero_weights = True):
         if type(self.final_weights) == type(None):
             raise Exception('Trying to get the precise equation before applying final linear regression')
         
