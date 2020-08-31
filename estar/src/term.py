@@ -97,13 +97,16 @@ class Term:
         for mandatory_token_family_idx in range(len(mandatory_tokens)):
 #            selected_type = mandatory_tokens[mandatory_token_type_idx].type
             selected_label = np.random.choice(mandatory_tokens[mandatory_token_family_idx].tokens)
-            if mandatory_tokens[mandatory_token_family_idx].status['unique_token_type']:      # 'single' - токен не может повторяться (даже с разными пар-ми)
+            if mandatory_tokens[mandatory_token_family_idx].status['unique_specific_token']:      # 'single' - токен не может повторяться (даже с разными пар-ми)
 #                permitted_tokens[permitted_tokens.index(mandatory_tokens[mandatory_token_type_idx])].token.remove(selected_label) 
                 self.occupied_tokens_labels.append(selected_label)
-            elif mandatory_tokens[mandatory_token_family_idx].status['unique_specific_token']:  # 'unique_token' - в слагаемом не может быть 2 мн-теля выбранного типа
+            elif mandatory_tokens[mandatory_token_family_idx].status['unique_token_type']:  # 'unique_token' - в слагаемом не может быть 2 мн-теля выбранного типа
 #                del permitted_tokens[permitted_tokens.index(mandatory_tokens[mandatory_token_type_idx])]
                 self.occupied_tokens_labels.extend([token_label for token_label in mandatory_tokens[mandatory_token_family_idx].tokens])
-                
+#                print('had', self.occupied_tokens_labels)
+#                print('added', [token_label for token_label in mandatory_tokens[mandatory_token_family_idx].tokens])
+#                print('now', self.occupied_tokens_labels)
+            
             self.gene.append(Factor(selected_label, mandatory_tokens[mandatory_token_family_idx]))
 
             parameter_selection = copy.deepcopy(mandatory_tokens[mandatory_token_family_idx].token_params)
@@ -123,12 +126,17 @@ class Term:
             selected_token = np.random.choice(self.available_tokens,
                                              p = [len(token_family.tokens)/total_tokens_num for token_family in self.available_tokens])
             selected_label = np.random.choice(selected_token.tokens)
+#            print(selected_label, selected_token.status['unique_specific_token'], selected_token.status['unique_token_type'])
 
-            if selected_token.status['unique_token_type']:      # 'unique_token_type' - токен не может повторяться (даже с разными пар-ми)
+            if selected_token.status['unique_specific_token']:      # 'unique_token_type' - токен не может повторяться (даже с разными пар-ми)
                 self.occupied_tokens_labels.append(selected_label)
 #                permitted_tokens[permitted_tokens.index(selected_token)].token.remove(selected_label) 
-            elif selected_token.status['unique_specific_token']:  # 'unique_specific_token' - в слагаемом не может быть 2 мн-теля выбранного типа
-                self.occupied_tokens_labels.extend([token_label for token_label in mandatory_tokens[mandatory_token_family_idx].tokens])
+            elif selected_token.status['unique_token_type']:  # 'unique_specific_token' - в слагаемом не может быть 2 мн-теля выбранного типа
+                self.occupied_tokens_labels.extend([token_label for token_label in selected_token.tokens])
+#                print(selected_label, selected_token.status['unique_token_type'])
+#                print('had', self.occupied_tokens_labels)
+#                print('added', [token_label for token_label in selected_token.tokens])
+#                print('now', self.occupied_tokens_labels)
 
 #                del permitted_tokens[permitted_tokens.index(selected_token)]
             
@@ -169,7 +177,12 @@ class Term:
                 gene_cleared.append(self.gene[factor_idx])
 #        print('after deleting:', [factor.label for factor in gene_cleared])
                 
-        self.occupied_tokens_labels = forbidden_terms
+#        print('before merging')
+#        print('self.occupied... ', self.occupied_tokens_labels)
+#        print('forbidden terms', forbidden_terms)
+        for term in forbidden_terms:
+            if term not in self.occupied_tokens_labels: self.occupied_tokens_labels.append(term)
+#        self.occupied_tokens_labels = forbidden_terms
 #        print([token.tokens for token in self.available_tokens])
         token_selection = self.available_tokens
 #        print(cleared_num, forbidden_terms, [token.tokens for token in token_selection])
@@ -179,6 +192,10 @@ class Term:
 #            for token_idx in range(len(token_selection[token_type_idx].tokens)):
 #                if token_selection[token_type_idx].tokens[token_idx] in forbidden_terms:
 #                    del token_selection[token_type_idx].tokens[token_idx]
+
+#        print('after merging')
+#        print('self.occupied... ', self.occupied_tokens_labels)
+#        print('available', [token_family.tokens for token_family in token_selection])
         
         filling_try = 0
         while True:
