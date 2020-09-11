@@ -19,29 +19,30 @@ from src.supplementary import Detect_Similar_Terms
 
 
 class Population:
-    def __init__(self, evol_operator, tokens, pop_size, basic_terms,
-                 eq_len = 8, max_factors_in_terms = 3): 
+    def __init__(self, evol_operator, history, tokens, pop_size, basic_terms,
+                 eq_len = 8, max_factors_in_terms = 3, visualizer = None): 
         
         self.evol_operator = evol_operator
         self.tokens = tokens
+        self.visualizer = visualizer
 
         self.pop_size = pop_size
         self.population = [Equation(self.tokens, basic_terms, eq_len, max_factors_in_terms) for i in range(pop_size)]
         for eq in self.population:
             eq.Split_data()
+            eq.check_split_correctness()
             evol_operator.get_fitness(eq)
+        
+        self.history = history
 
 
     def Genetic_Iteration(self, iter_index, strict_restrictions = True):
         self.population = Population_Sort(self.population)
         self.population = self.population[:self.pop_size]
         print(iter_index, self.population[0].fitness_value)
-#        for equation in self.population:
-#            print(equation.text_form, equation.fitness_value)
-#        if iter_index > 0:
-#            if self.population[0] != self.prev_population[0]:
-#                self.Calculate_True_Weights(False)
-#                print(self.text_form())
+        if type(self.visualizer) != type(None): 
+            self.visualizer.update(self.population[0].fitness_value)
+            print('Drawing')
         
         if iter_index > 0: 
             del self.prev_population
@@ -53,18 +54,21 @@ class Population:
     def Initiate_Evolution(self, iter_number, log_file = None, test_indicators = True):
         if test_indicators:
             print('Evolution performed with intermediate indicators')
-        self.fitness_values = np.empty(iter_number)
+        #self.fitness_values = np.empty(iter_number)
         for idx in range(iter_number):
             strict_restrictions = False if idx < iter_number - 1 else True
+            
             self.Genetic_Iteration(idx, strict_restrictions = strict_restrictions)
             self.population = Population_Sort(self.population)
-            self.fitness_values[idx]= self.population[0].fitness_value
+            self.history.extend_fitness_history(self.population[0].fitness_value)
+            self.history.save_fitness()
+            
             if log_file: log_file.Write_apex(self.population[0], idx)
             if test_indicators: 
                 print('iteration %3d' % idx)
                 print('best fitness:', self.population[0].fitness_value, ', worst_fitness', self.population[-1].fitness_value)
                 print('weights:', self.population[0].weights)
-        return self.fitness_values
+#        return self.fitness_values
 
 
     def Calculate_True_Weights(self, sort = True):
@@ -90,6 +94,9 @@ class Population:
 def Get_true_coeffs(tokens, equation): # Не забыть про то, что последний коэф - для константы
     target = equation.terms[equation.target_idx]
 
+    equation.check_split_correctness()
+            
+    
     target_vals = target.Evaluate(False)
     features_vals = []
     nonzero_features_indexes = []

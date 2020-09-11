@@ -158,6 +158,8 @@ class Baseline_crossover(Specific_Operator):
                     result_equation_2.terms[i] = internal_term
                     temp_term_1, temp_term_2 = self.suboperators['Term_crossover'].apply(result_equation_1.terms[i], result_equation_2.terms[i])
             result_equation_1.Split_data(); result_equation_2.Split_data()
+            result_equation_1.check_split_correctness()
+            result_equation_2.check_split_correctness()
             offsprings.extend((result_equation_1, result_equation_2))
         
         processes = []
@@ -214,8 +216,9 @@ class Param_crossover(Specific_Operator):
             The offspring terms.
         
         """
-        offspring_1 = deepcopy(term_1)
+        offspring_1 = deepcopy(term_1)  # Потенциальная ошибка
         offspring_2 = deepcopy(term_2)
+        
         if len(offspring_1.gene) != len(offspring_2.gene):
             print([(token.label, token.params) for token in offspring_1.gene], [(token.label, token.params) for token in offspring_2.gene])
             raise Exception('Wrong terms passed:')
@@ -234,6 +237,8 @@ class Param_crossover(Specific_Operator):
                     offspring_2.gene[term2_token_idx].params[param] = (term_1.gene[term1_token_idx].params[param] + 
                                                                (1 - self.params['proportion'])*(term_2.gene[term2_token_idx].params[param] 
                                                                - term_1.gene[term1_token_idx].params[param]))
+        
+        offspring_1.Reset_occupied_tokens(); offspring_2.Reset_occupied_tokens()
         return offspring_1, offspring_2
 
 
@@ -338,8 +343,9 @@ class Baseline_mutation(Specific_Operator):
                         else:
                             mut_operator = self.suboperators['Mutation']
                         if 'forbidden_tokens' in mut_operator.params.keys():
-                            mut_operator.params['forbidden_tokens'] = equation.forbidden_token_labels
+                            mut_operator.params['forbidden_tokens'] = equation.terms[equation.target_idx].gene   # [factor.label for factor in equation.terms[].gene]
                         equation.terms[term_idx] = mut_operator.apply(term_idx, equation)
+                        equation.check_split_correctness()
                 self.suboperators['Coeff_calc'].apply(equation)
                 self.suboperators['Fitness_eval'].apply(equation)
 #                equation.Split_data()
@@ -368,10 +374,12 @@ class Term_mutation(Specific_Operator): # Добавить "запрещённы
         new_term : Term object
             The new, randomly created, term.
             
-        """        
-        new_term = Term(equation.tokens, max_factors_in_term = equation.max_factors_in_term) #, forbidden_tokens = self.params['forbidden_tokens'])        
+        """       
+#        print('reference forbidden tokens:', self.params['forbidden_tokens'])
+        new_term = Term(equation.tokens, max_factors_in_term = equation.max_factors_in_term, forbidden_tokens = self.params['forbidden_tokens'])        #) #
         while not Check_Unqueness(new_term, equation.terms[:term_idx] + equation.terms[term_idx+1:]):
-            new_term = Term(equation.tokens, max_factors_in_term = equation.max_factors_in_term)
+            new_term = Term(equation.tokens, max_factors_in_term = equation.max_factors_in_term, forbidden_tokens = self.params['forbidden_tokens'])
+#        print(equation.terms[term_idx].text_form, 'mutated into', new_term.text_form)
         return new_term
         
 
@@ -461,13 +469,21 @@ class Baseline_LASSO(Specific_Operator):
         """
 #        equation.Split_data()
         equation.Evaluate_equation()
+#        print('alpha = ', self.params['sparcity'])
         estimator = Lasso(alpha = self.params['sparcity'], copy_X=True, fit_intercept=True, max_iter=1000,
                                normalize=False, positive=False, precompute=False, random_state=None,
                                selection='cyclic', tol=0.0001, warm_start=False)
 #        estimator = Lasso(alpha = self.params['sparcity'], normalize=False)
-
         estimator.fit(equation.features, equation.target)
         equation.weights = estimator.coef_
+#        print('weights 1st approach:', equation.weights)
+
+#        estimator = Lasso(alpha = self.params['sparcity'], copy_X=True, fit_intercept=True)
+#        estimator.fit(equation.features, equation.target)
+#        equation.weights = estimator.coef_
+#        print('weights 2nd approach:', equation.weights)
+#        
+        
         if len(np.nonzero(estimator.coef_)[0]) == 1 and (1 - estimator.coef_[np.nonzero(estimator.coef_)[0][0]]) < 0.001:
 #            file_feature = str(equation.gene[estimator.coef_[0][0]].factors[0].label)
             np.save('file_features', equation.features)

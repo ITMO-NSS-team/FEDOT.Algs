@@ -75,6 +75,7 @@ class Equation(object):
             self.terms.append(new_term)
 
 
+
     def __eq__(self, other):
         if all([any([self_term == other_term for other_term in other.terms]) for self_term in self.terms]):
             return True
@@ -113,7 +114,7 @@ class Equation(object):
         for feat_idx in range(len(self.terms)):
             if self.target_idx != feat_idx:
 #                print('feature:', feat_idx)#, 'tokens:', [token.tokens for token in self.terms[feat_idx].available_tokens])
-                self.terms[feat_idx].Remove_Dublicated_Factors(self.forbidden_token_labels, self.terms[:feat_idx]+self.terms[feat_idx+1:])
+                self.terms[feat_idx].Remove_Dublicated_Factors(self.terms[self.target_idx], self.terms[:feat_idx]+self.terms[feat_idx+1:])
             else:
                 continue        
 
@@ -122,6 +123,21 @@ class Equation(object):
 #    def Show_terms(self):
 #        for term in self.terms:
 #            print([(factor.label, factor.params) for factor in term.gene])             
+        
+    def check_split_correctness(self):
+        target = self.terms[self.target_idx]
+#        target_labels = [factor.label for factor in target.gene]
+        for term_idx in range(len(self.terms)):
+            if term_idx == self.target_idx: continue
+            for factor in self.terms[term_idx].gene:
+                if factor.token.status['unique_for_right_part'] and any([factor == rp_factor for rp_factor in target.gene]):
+                    print('In target:', target.text_form) 
+                    print('In other terms discovered:', [factor.label for factor in self.terms[term_idx].gene])
+                    print([term.text_form for term in self.terms])
+                    raise ValueError('Forbidden factor ')                         
+#            if any([(factor.label in target_labels and [tf for tf in self.tokens if tf.type == factor.token.type][0].status['unique_for_right_part']) 
+#                for factor in self.terms[term_idx].gene]): #
+   
         
     @property 
     def forbidden_token_labels(self):
@@ -132,7 +148,7 @@ class Equation(object):
             for token in token_family.tokens:
                 if token in target_symbolic and token_family.status['unique_for_right_part']:
                     forbidden_tokens.add(token)        
-#        print(forbidden_tokens)
+        #print(forbidden_tokens)
         return forbidden_tokens
         
     @property

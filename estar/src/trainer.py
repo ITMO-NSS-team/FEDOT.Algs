@@ -7,13 +7,14 @@ Created on Tue Feb 18 13:33:54 2020
 """
 
 import numpy as np
-import datetime
+#import datetime
 from src.population import Population
-
-
+from src.supplementary_media import Training_History
+import time
 
 def save_fitness(filename, fitnesses):
     np.save(filename, np.array(fitnesses))
+
 
 def set_argument(var, fun_kwargs, base_value):
     try:
@@ -24,30 +25,36 @@ def set_argument(var, fun_kwargs, base_value):
 
 
 def discover_Equation(tokens, evolutionary_operator, basic_terms, **kwargs): 
-    t1 = datetime.datetime.now()
+#    t1 = datetime.datetime.now()
     
     iter_number = set_argument('iter_number', kwargs, 100)
     pop_size = set_argument('pop_size', kwargs, 8)
     eq_len = set_argument('eq_len', kwargs, 6)
     max_factors = set_argument('max_factors', kwargs, 2)
     test_output = set_argument('test_output', kwargs, True)
+    fitness_file = set_argument('fitness_file', kwargs, None)
+    history = Training_History(filename = fitness_file)    
+    
+    visualizer = set_argument('visualizer', kwargs, None)
+    if type(visualizer) != type(None):
+        print('launching visualizer', type(visualizer))
+        visualizer.launch()
 
-    population = Population(evolutionary_operator, tokens, pop_size = pop_size, basic_terms = basic_terms, 
-                            eq_len = eq_len, max_factors_in_terms = max_factors)
+    population = Population(evolutionary_operator, history, tokens, pop_size = pop_size, basic_terms = basic_terms, 
+                            eq_len = eq_len, max_factors_in_terms = max_factors, visualizer = visualizer)
 
-    best_fitnesses = population.Initiate_Evolution(iter_number = iter_number,
-                                                   log_file = None, test_indicators = test_output)
+    population.Initiate_Evolution(iter_number = iter_number, log_file = None, test_indicators = test_output) #best_fitnesses = 
+    
+#    history.extend_fitness_history(best_fitnesses)
 #    filename = 'Fitness_alpha_' + str(alpha) + '.npy'
 #    save_fitness(filename, best_fitnesses)
     
-    print('Achieved best fitness:', best_fitnesses[-1])#, 'with alpha =', alpha)
-    
+#, 'with alpha =', alpha)
     population.Calculate_True_Weights()
-                    
-    t2 = datetime.datetime.now()
-
-    eq_text_form = population.text_form()
-    print(eq_text_form)
+    history.equation = population.text_form()
+    print('Achieved best fitness:', history.achieved_fitness)
+    print('Discovered equation:', history.equation)
+    return history
     
     
 #    return eq_text_form
@@ -115,6 +122,8 @@ class Equation_Trainer:
         self.tokens = tokens;
         self.basic_terms = basic_terms
         self.tuning_grid = None
+        self._history = []
+
 
     
     def parameters_grid(self, parameters_order, params):
@@ -188,7 +197,7 @@ class Equation_Trainer:
         
         self.tuning_grid = None
     
-    def train(self, epochs, evolutionary_operator, parameters_order = None, parameters = None):
+    def train(self, epochs, evolutionary_operator, parameters_order = None, parameters = None, fitness_file = None, visualizer = None):
         '''
         
         Method to train the equation to obtain its symbolic form;
@@ -211,24 +220,28 @@ class Equation_Trainer:
         if self.tuning_grid:
             print('Using parameters from grid')
             use_params = np.vectorize(discover_Equation, otypes = None, 
-                                      excluded = ['tokens', 'basic_terms', 'iter_number'],
+                                      excluded = ['tokens', 'basic_terms', 'iter_number', 'fitness_file', 'visualizer'],
                                       cache=True)
-            use_params(tokens = self.tokens, evolutionary_operator = evolutionary_operator, basic_terms = self.basic_terms, iter_number = epochs, 
-                       pop_size = self.tuning_grid[self.parameters_order.index('pop_size')],
-                       eq_len = self.tuning_grid[self.parameters_order.index('eq_len')],
-                       max_factors = self.tuning_grid[self.parameters_order.index('max_factors')],
-                       test_output = self.tuning_grid[self.parameters_order.index('test_output')])
+            history = use_params(tokens = self.tokens, evolutionary_operator = evolutionary_operator, basic_terms = self.basic_terms, 
+                                   iter_number = epochs, 
+                                   pop_size = self.tuning_grid[self.parameters_order.index('pop_size')],
+                                   eq_len = self.tuning_grid[self.parameters_order.index('eq_len')],
+                                   max_factors = self.tuning_grid[self.parameters_order.index('max_factors')],
+                                   test_output = self.tuning_grid[self.parameters_order.index('test_output')],
+                                   fitness_file = fitness_file, visualizer = visualizer)
         elif parameters: # .any()
             print('Using single vector of parameters')
-            self.discover_Equation(tokens = self.tokens, evolutionary_operator = evolutionary_operator, basic_terms = self.basic_terms, iter_number = epochs, 
+            history = self.discover_Equation(tokens = self.tokens, evolutionary_operator = evolutionary_operator, basic_terms = self.basic_terms, iter_number = epochs, 
                          pop_size = parameters[parameters_order.index('pop_size')],
                          eq_len = parameters[parameters_order.index('eq_len')],
                          max_factors = parameters[parameters_order.index('max_factors')],
-                         test_output = self.tuning_grid[self.parameters_order.index('test_output')])
+                         test_output = self.tuning_grid[self.parameters_order.index('test_output')],
+                         fitness_file = fitness_file, visualizer = visualizer)
         else:
-            raise ValueError('The EA hyperparameters are not defined')
+            raise ValueError('The evolutionary algorithm hyperparameters are not defined')
+        self._history.append(history)
           
     
     @property
     def history(self):
-        return self._history
+        return self._history        

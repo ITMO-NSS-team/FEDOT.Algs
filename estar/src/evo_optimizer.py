@@ -210,6 +210,7 @@ class Operator_director:
         term_crossover = baseline.Term_crossover(['crossover_probability'])
         crossover = baseline.Baseline_crossover([])        
         
+        print('During the operator assembly: sparcity = ', sparcity)
         lasso = baseline.Baseline_LASSO(['sparcity']); lasso.params = {'sparcity' : sparcity}
         fitness_eval = baseline.Baseline_fitness(['penalty_coeff'])
         
@@ -220,7 +221,7 @@ class Operator_director:
         param_crossover.params = {'proportion' : 0.4} if not 'param_crossover_params' in kwargs.keys() else kwargs['param_crossover_params']
         term_crossover.params = {'crossover_probability' : 0.3} if not 'term_crossover_params' in kwargs.keys() else kwargs['term_crossover_params']
         crossover.params = {} if not 'crossover_params' in kwargs.keys() else kwargs['crossover_params']
-        fitness_eval.params = {'penalty_coeff' : 0.1} if not 'fitness_eval_params' in kwargs.keys() else kwargs['fitness_eval_params']
+        fitness_eval.params = {'penalty_coeff' : 0.5} if not 'fitness_eval_params' in kwargs.keys() else kwargs['fitness_eval_params']
         
         mutation.suboperators = {'Mutation' : [param_mutation, term_mutation], 'Coeff_calc' : lasso, 'Fitness_eval' : fitness_eval}
         crossover.suboperators = {'Selection' : selection, 'Param_crossover' : param_crossover, 'Term_crossover' : term_crossover,
