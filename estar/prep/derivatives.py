@@ -13,7 +13,7 @@ import multiprocessing as mp
 from prep.cheb import Process_Point_Cheb
 from prep.smoothing import Smoothing
 
-def Preprocess_derivatives(field, output_file_name = None, mp_poolsize = 4, max_order = 2, polynomial_window = 9):
+def Preprocess_derivatives(field, steps = None, output_file_name = None, smooth = True, mp_poolsize = 4, max_order = 2, polynomial_window = 9, poly_order = None):
     '''
     
     Main preprocessing function for the calculation of derivatives on uniform grid
@@ -51,34 +51,41 @@ def Preprocess_derivatives(field, output_file_name = None, mp_poolsize = 4, max_
     polynomial_boundary = polynomial_window//2 + 1
 
     print('Executing on grid with uniform nodes:')
+    if type(steps) == type(None):
+        steps = np.ones(np.ndim(field))
     dim_coords = []
     for dim in np.arange(np.ndim(field)):
-        dim_coords.append(np.linspace(0, field.shape[dim]-1, field.shape[dim]))
+        dim_coords.append(np.arange(0, field.shape[dim] * steps[dim], steps[dim]))
 
         
     grid = np.meshgrid(*dim_coords, indexing = 'ij')
+#    print(grid[0].shape)
 
-    field = Smoothing(field, 'gaussian', sigma = 9)
+    if smooth: field = Smoothing(field, 'gaussian', sigma = 9)
     index_array = []
+
     
     for idx, _ in np.ndenumerate(field):
-        index_array.append((idx, field, grid, polynomial_window, max_order, polynomial_boundary))
+        index_array.append((idx, field, grid, polynomial_window, max_order, polynomial_boundary, poly_order))
+    print(len(index_array))  
     
-
-    pool = mp.Pool(mp_poolsize)
-    derivatives = pool.map_async(Process_Point_Cheb, index_array)
-    pool.close()
-    pool.join()
-    derivatives = derivatives.get()
+    if mp_poolsize > 1:
+        pool = mp.Pool(mp_poolsize)
+        derivatives = pool.map_async(Process_Point_Cheb, index_array)
+        pool.close()
+        pool.join()
+        derivatives = derivatives.get()
+    else:
+        derivatives = list(map(Process_Point_Cheb, index_array))
     t2 = datetime.datetime.now()
 
     print('Start:', t1, '; Finish:', t2)
     print('Preprocessing runtime:', t2 - t1)
         
     #np.save('ssh_field.npy', field)   
-    if output_file_name:
+    if type(output_file_name) != type(None):
         if not '.npy' in output_file_name:
             output_file_name += '.npy'        
         np.save(output_file_name, derivatives)
     else:
-        return derivatives        
+        return np.array(derivatives)        
