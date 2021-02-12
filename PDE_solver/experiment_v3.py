@@ -77,7 +77,7 @@ def init_field_expetiment(nrun,grid_scenario=[[10,10]],interp_type='random',diff
         else:
             arr = np.random.random((len(x), len(t)))
             
-        exact_sln = f'sln_{grid_res[0]}.csv'
+        exact_sln = f'exact_sln/wave_{grid_res[0]}.csv'
     
         wolfram_interp =  np.genfromtxt(exact_sln, delimiter=',')
         
