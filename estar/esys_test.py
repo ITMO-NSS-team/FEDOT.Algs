@@ -165,6 +165,8 @@ if __name__ == '__main__':
 #    memory_assesment()
 #    time.sleep(5)
 #    
+    
+    
     test_system = structure.SoEq([u_tokens, v_tokens, p_tokens], 16, 1, sparcity = (0.05, 0.05, 0.05), eq_search_iters = 30)
     test_system.set_eq_search_evolutionary(director.constructor.operator)
 #    test_system.set_cache(cache)
@@ -172,6 +174,25 @@ if __name__ == '__main__':
     test_system.create_equations(population_size=16)
     for equation in test_system.structure:
         print(equation.text_form)
+    
+    tokens = [u_tokens, v_tokens, p_tokens]
+    pop_constructor = operators.systems_population_constructor(tokens=tokens, terms_number=10, 
+                                                               max_factors_in_term=1, eq_search_iters=100)
+    
+    optimizer = moeadd_optimizer(pop_constructor, 7, 20, None, delta = 1/50., neighbors_number = 3)
+
+    evo_operator = operators.sys_search_evolutionary_operator(operators.mixing_xover, 
+                                                              operators.gaussian_mutation)
+
+    optimizer.set_evolutionary(operator=evo_operator)
+    best_obj = np.concatenate(np.ones([1]), 
+                              np.zeros(shape=len([1 for token_family in tokens if token_family.status['meaningful']])))    
+    optimizer.pass_best_objectives(best_obj)
+    
+    def simple_selector(sorted_neighbors, number_of_neighbors = 4):
+        return sorted_neighbors[:number_of_neighbors]
+    
+    optimizer.optimize(simple_selector, 0.95, (4,), 100, 0.75)    
     
     
     
