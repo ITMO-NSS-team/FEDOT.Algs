@@ -15,33 +15,12 @@ def memory_assesment():
     except NameError:
         from guppy import hpy
         h=hpy()
-        
     print(h.heap())
-#    print(h.heap().more)
     del h
 
-#def memory_assesment(var_type = None):
-#    try:
-#        h=hpy()
-#    except NameError:
-#        from guppy import hpy
-#        h=hpy()
-#        
-#    if type(var_type) == type(None):
-#        print(h.heap())
-#    else:
-#        for 
-#    del h
-
 def factor_params_to_str(factor, set_default_power = False):
-    param_label = ''
-    for param, val in factor.params.items():
-        assert isinstance(val, int)
-        if param == 'power' and set_default_power:
-            param_label += ' ' + param + ' ' + str(1)
-        else:
-            param_label += ' ' + param + ' ' + str(val)
-    return factor.label + param_label
+    param_label= tuple(factor.params)            
+    return (factor.label, param_label)
 
 def form_label(x, y):
     return x + ' * ' + y.cache_label if len(x) > 0 else x + y.cache_label
@@ -55,11 +34,7 @@ def Detect_Similar_Terms(base_equation_1, base_equation_2):
     similar_terms_from_eq2 = []
     
     different_terms_from_eq1 = []
-    different_terms_from_eq2 = []
-    
-#    print('Base terms:', [[(token.label, token.params) for token in term.structure] for term in base_equation_1.terms])
-#    print('Copy terms:', [[(token.label, token.params) for token in term.structure] for term in equation_1.terms])
-    
+    different_terms_from_eq2 = []    
     
     for eq1_term in base_equation_1.structure:     
         for eq2_term in base_equation_2.structure:
@@ -85,13 +60,18 @@ def Detect_Similar_Terms(base_equation_1, base_equation_2):
     return [same_terms_from_eq1, similar_terms_from_eq1, different_terms_from_eq1], [same_terms_from_eq2, similar_terms_from_eq2, different_terms_from_eq2]
         
 
-def Filter_powers(gene):
+def filter_powers(gene):    # Разобраться и переделать
     gene_filtered = []
     for token_idx in range(len(gene)):
-#        print(gene[token_idx])
         total_power = gene.count(gene[token_idx])
         powered_token = copy.deepcopy(gene[token_idx])
-        powered_token.params['power'] = total_power
+        
+        power_idx = np.inf
+        for param_idx, param_info in powered_token.params_description.items():
+            if param_info['name'] == 'power': 
+                power_idx = param_idx
+                break
+        powered_token.params[power_idx] = total_power
         if powered_token not in gene_filtered:
             gene_filtered.append(powered_token)
     return gene_filtered
@@ -122,7 +102,7 @@ def Define_Derivatives(var_name = 'u', dimensionality = 1, max_order = 2):
                 var_names.append('d'+ var_name + '/dx'+str(var_idx+1))
             else:
                 var_names.append('d^'+str(order+1) + var_name + '/dx'+str(var_idx+1)+'^'+str(order+1))
-    return tuple(var_names)    
+    return var_names    
 
 def Create_Var_Matrices(U_input, max_order = 3):
     var_names = ['u']
@@ -154,7 +134,6 @@ def Decode_Gene(gene, token_names, parameter_labels, n_params = 1):
 
 
 def Encode_Gene(label_dict, token_names, parameter_labels, n_params = 1):
-#    print(type(variables_names), variables_names)
     gene = np.zeros(shape = len(token_names) * n_params)
 
     for i in range(len(token_names)):

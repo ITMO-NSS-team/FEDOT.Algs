@@ -11,6 +11,10 @@ import numpy as np
 import src.globals as global_var
 from src.factor import Factor
 
+def constancy_hard_equality(tensor, epsilon = 1e-7):
+    print(np.abs(np.max(tensor) - np.min(tensor)), epsilon, type(np.abs(np.max(tensor) - np.min(tensor))),  type(epsilon))
+    return np.abs(np.max(tensor) - np.min(tensor)) < epsilon
+    
 class Evaluator(object):
     """
     Class for evaluator of token (factor of the term in the sought equation) values with arbitrary function
@@ -36,11 +40,11 @@ class Evaluator(object):
     def __init__(self, eval_function):
         self._evaluator = eval_function
         
-    def set_params(self, **params):
-        """
-        Set the parameters of the evaluator, using keyword arguments
-        """
-        self.params = params
+#    def set_params(self, **params):
+#        """
+#        Set the parameters of the evaluator, using keyword arguments
+#        """
+#        self.params = params
         
     def apply(self, token):
         """
@@ -128,7 +132,9 @@ class Token_family(object):
         self.type = token_type
         self.evaluator_set = False; self.params_set = False; self.cache_set = False
         
-    def set_status(self, meaningful = False, unique_specific_token = False, unique_token_type = False, unique_for_right_part = False):
+    def set_status(self, meaningful = False, unique_specific_token = False, 
+                   unique_token_type = False, unique_for_right_part = False,
+                   requires_grid = False):
         """
         Set the status of the elements of the token family; 
         
@@ -152,8 +158,9 @@ class Token_family(object):
         self.status['unique_specific_token'] = unique_specific_token
         self.status['unique_token_type'] = unique_token_type
         self.status['unique_for_right_part'] = unique_for_right_part
+        self.status['requires_grid'] = requires_grid
 
-    def set_params(self, tokens, token_params):
+    def set_params(self, tokens, token_params, equality_ranges):
         """
         Define the token family with list of tokens and their parameters
         
@@ -177,10 +184,11 @@ class Token_family(object):
         """
         self.tokens = tokens; self.token_params = token_params
         self.params_set = True
+        self.equality_ranges = equality_ranges
         if self.evaluator_set:
             self.test_evaluator()
 
-    def set_evaluator(self, eval_function, **eval_params):    #Test, if the evaluator works properly
+    def set_evaluator(self, eval_function):#, **eval_params):    #Test, if the evaluator works properly
         """
         Define the evaluator for the token family and its parameters
         
@@ -233,13 +241,16 @@ class Token_family(object):
         
         """
         self._evaluator = Evaluator(eval_function)
-        self._evaluator.set_params(**eval_params)
+#        self._evaluator.set_params(**eval_params)
         self.evaluator_set = True
         if self.params_set:
             self.test_evaluator()
 
     def use_glob_cache(self):
         self.cache_set = True
+
+#    def use_grid_cache(self):
+#        self.grid_cache_set = True
 
     def test_evaluator(self):
         """
@@ -248,9 +259,12 @@ class Token_family(object):
         Raises Exception, if the evaluator does not work properly.
         """
         assert self.cache_set, 'Cache not passed into the token familiy before test of evaluator'
-        self.test_token = Factor(token_name = np.random.choice(self.tokens), token = self)
-        self.test_token.Set_parameters(random = True)
+        self.test_token = Factor(token_name = np.random.choice(self.tokens), token_family = self, randomize = True)
+#        self.test_token.Set_parameters(random = True)
         self.test_token.use_cache()
+        if self.status['requires_grid']:
+            self.test_token.use_grids_cache()
+        print(self.test_token.grid_idx, self.test_token.params)
 #        self.test_params = {}
 #        for key in self.token_params.keys():
 #            if self.token_params[key][0] == self.token_params[key][1]:
@@ -260,20 +274,41 @@ class Token_family(object):
 #                    self.test_params[key] = np.random.uniform(low = self.token_params[key][0], high = self.token_params[key][0]) 
 #                else:
 #                    self.test_params[key] = np.random.randint(self.token_params[key][0], self.token_params[key][1])
-        try:
-            self.test_evaluation = self._evaluator.apply(self.test_token)
-            print('Test evaluation performed correctly')
-        except:
-            raise Exception('Something went wrong during the test evaluation')
+#        try:
+        self.test_evaluation = self._evaluator.apply(self.test_token)
+        print('Test evaluation performed correctly')
+#        except:
+#            raise Exception('Something went wrong during the test evaluation')
+
+    def chech_constancy(self, test_function, **tfkwargs):
+        '''
+        Method to check, if any single simple token in the studied domain is constant, or close to it. The constant token is to be displayed and deleted from tokens and cache.
+        '''
+        assert self.params_set
+        constant_tokens_labels = []
+        for label in self.tokens:
+            print(type(global_var.tensor_cache.memory[label + ' power 1']))
+            constancy = test_function(global_var.tensor_cache.memory[label + ' power 1'], **tfkwargs)
+            if constancy:
+                constant_tokens_labels.append(label)
+        
+        for label in constant_tokens_labels:
+            print('Function ', label, 'is assumed to be constant in the studied domain. Removed from the equaton search')
+            self.tokens.remove(label)
+            global_var.tensor_cache.delete_entry(label + ' power 1')
       
     def evaluate(self, token):    # Return tensor of values of applied evaluator
         if self.evaluator_set and self.cache_set:
             return self._evaluator.apply(token)
         else:
             raise TypeError('Evaluator function or its parameters not set brfore evaluator application.')
-            
+    
+    def create():
+        
 #    def change_variables(self, prev_operator):
 #        assert 'token_matrices' in self.eval_params
 #        for key, value in self.set_params['token_matrices'].items():
 #            self.set_params['token_matrices'][key] = value - prev_operator # С индексом? 
             
+class TF_Pool(object):
+    def __init__():

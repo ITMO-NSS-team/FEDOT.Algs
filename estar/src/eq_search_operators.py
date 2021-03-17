@@ -117,7 +117,7 @@ class Baseline_crossover(Specific_Operator):
         return the new population, created with the noted operators and containing both parent individuals and their offsprings.    
     
     """
-    def apply(self, population):
+    def apply(self, population, separate_vars):
         """
         Method to obtain a new population by selection of parent individuals (equations) and performing a crossover between them to get the offsprings.
         
@@ -158,7 +158,8 @@ class Baseline_crossover(Specific_Operator):
                     result_equation_1.structure[i] = result_equation_2.structure[i]
                     result_equation_2.structure[i] = internal_term
                     temp_term_1, temp_term_2 = self.suboperators['Term_crossover'].apply(result_equation_1.structure[i], result_equation_2.structure[i])
-            result_equation_1.Split_data(); result_equation_2.Split_data()
+            result_equation_1.select_target_idx(separate_vars = separate_vars)
+            result_equation_2.select_target_idx(separate_vars = separate_vars)
             result_equation_1.check_split_correctness()
             result_equation_2.check_split_correctness()
             offsprings.extend((result_equation_1, result_equation_2))
@@ -519,7 +520,7 @@ class Parameter_mutation(Specific_Operator):
         unmutable_params = {'dim'}
         while True:
             term = equation.structure[term_idx] 
-            for factor in term.structure:
+            for factor in term.structure:   # Возможное место ошибок
                 parameter_selection = deepcopy(factor.params)
                 token_family = [token_family for token_family in term.tokens if factor.label in token_family.tokens][0]
                 for param, interval in token_family.token_params.items():
@@ -583,7 +584,9 @@ class Baseline_LASSO(Specific_Operator):
         estimator = Lasso(alpha = self.params['sparcity'], copy_X=True, fit_intercept=True, max_iter=1000,
                                normalize=False, positive=False, precompute=False, random_state=None,
                                selection='cyclic', tol=0.0001, warm_start=False)
-        _, target, features = equation.value(normalize = True, return_val = False)
+        print('running new lasso')
+        _, target, features = equation.evaluate(normalize = True, return_val = False)
+
         estimator.fit(features, target)
         
 #        if len(np.nonzero(estimator.coef_)[0]) == 1 and (1 - estimator.coef_[np.nonzero(estimator.coef_)[0][0]]) < 0.001:
@@ -671,7 +674,7 @@ class Baseline_fitness(Specific_Operator):
         
 #        weights = Get_True_Coefficients(equation)   # Если заработает - настроить без лишних вычислений
 #        print(type(equation), equation.weights_final)
-        _, target, features = equation.value(normalize = False, return_val = False)
+        _, target, features = equation.evaluate(normalize = False, return_val = False)
 #        print('equation final weights:', type(equation), equation.weights_final[0])
         try:
             rl_error = np.linalg.norm(np.dot(features, equation.weights_final[:-1]) + 
@@ -682,10 +685,10 @@ class Baseline_fitness(Specific_Operator):
 #        print('RL_err', rl_error, equation.weights_final)
         if rl_error == 0:
             fitness_value = np.inf
-            print('infite fitness!')
+            print('infinite fitness!', equation.text_form)
         else:
             fitness_value = 1 / (rl_error)
         if np.sum(equation.weights_final) == 0:
             fitness_value = fitness_value * self.params['penalty_coeff']
-        print(rl_error, fitness_value, '- fitness; target:', np.max(target), np.min(target), equation.structure[equation.target_idx].text_form)
+#        print(rl_error, fitness_value, '- fitness; target:', np.max(target), np.min(target), equation.structure[equation.target_idx].text_form)
         equation.fitness_value = fitness_value

@@ -160,7 +160,7 @@ class TerminalToken(Token):
             assert key < self._number_params, "The parameter index must not exceed" \
                                               " the number of parameters" + recomendations
             assert (len(value['bounds']) == 2 and
-                   value['bounds'][0] < value['bounds'][1]), "Bounds of each parameter must have" \
+                   value['bounds'][0] <= value['bounds'][1]), "Bounds of each parameter must have" \
                                                             " length = 2 and contain value" \
                                                             " boundaries MIN <= MAX." + recomendations
 

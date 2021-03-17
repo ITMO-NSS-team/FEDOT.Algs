@@ -277,7 +277,7 @@ class Evolutionary_operator():
             raise ValueError('No method to calculate the weights of the equation is defined.')
         
         
-    def apply(self, population, show_operations = False):
+    def apply(self, population, separate_vars, show_operations = False):
         '''
         
         Apply operator to the popuation.
@@ -286,7 +286,7 @@ class Evolutionary_operator():
         #print(type(population))
         self.check_correctness()
         if type(self.crossover) != type(None):
-            population = self.crossover.apply(population)
+            population = self.crossover.apply(population, separate_vars)
             if show_operations:
                 print('performed crossover')
         if type(self.mutation) != type(None):
@@ -300,9 +300,9 @@ class Evolutionary_operator():
         return population
 
         
-    def get_fitness(self, individual):
+    def get_fitness(self, individual): # Пр
         self.coeff_calculator.apply(individual)
-        self.fitness.apply(individual)
+        return self.fitness.apply(individual)
 
     def set_sparcity(self, sparcity_value = None):
         if type(sparcity_value) != type(None):
