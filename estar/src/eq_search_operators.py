@@ -16,7 +16,7 @@ from multiprocessing import Process
 import src.globals
 from src.structure import Term, Check_Unqueness
 from src.supplementary import *
-from src.supplementary import Detect_Similar_Terms
+from src.supplementary import Filter_powers, Detect_Similar_Terms
 
 
 def flatten(folded_equation):
@@ -76,7 +76,7 @@ class Baseline_t_selection(Specific_Operator):
         Select a pool of pairs, between which the procreation will be later held. The population is divided into groups, and the individual 
         with highest fitness is allowed to take part in the crossover. 
         
-        Attributes:
+        Parameters:
         -----------
         population : list of equation objects
             The population, among which the selection is held.
@@ -220,7 +220,7 @@ class Param_crossover(Specific_Operator):
         """
         offspring_1 = deepcopy(term_1)  # Потенциальная ошибка
         offspring_2 = deepcopy(term_2)
-        offspring_1.clear_value(); offspring_2.clear_value()
+        offspring_1.reset_saved_state(); offspring_2.reset_saved_state()
         
         if len(offspring_1.structure) != len(offspring_2.structure):
             print([(token.label, token.params) for token in offspring_1.structure], [(token.label, token.params) for token in offspring_2.structure])
@@ -228,18 +228,38 @@ class Param_crossover(Specific_Operator):
         
         for term1_token_idx in np.arange(len(term_1.structure)):
             term2_token_idx = [i for i in np.arange(len(term_2.structure)) if term_2.structure[i].label == term_1.structure[term1_token_idx].label][0]
-            for param in offspring_1.structure[term1_token_idx].params.keys():
-                if param != 'power' and param != 'dim':
+            for param_idx, param_descr in offspring_1.structure[term1_token_idx].params_description.items():
+                if param_descr['name'] == 'power': power_param_idx = param_idx
+                if param_descr['name'] == 'dim': dim_param_idx = param_idx                
+#            power_param_idx = ; dim_param_idx = 
+#            for param in offspring_1.structure[term1_token_idx].params.keys():
+#                if param != 'power' and param != 'dim':
+#                    try:
+#                        offspring_1.structure[term1_token_idx].params[param] = (term_1.structure[term1_token_idx].params[param] + 
+#                                                                   self.params['proportion']*(term_2.structure[term2_token_idx].params[param] 
+#                                                                   - term_1.structure[term1_token_idx].params[param]))
+#                    except KeyError:
+#                        print([(token.label, token.params) for token in offspring_1.structure], [(token.label, token.params) for token in offspring_2.structure])
+#                        raise Exception('Wrong set of parameters:', offspring_1.structure[term1_token_idx].params.keys(), offspring_2.structure[term1_token_idx].params.keys())
+#                    offspring_2.structure[term2_token_idx].params[param] = (term_1.structure[term1_token_idx].params[param] + 
+#                                                               (1 - self.params['proportion'])*(term_2.structure[term2_token_idx].params[param] 
+#                                                               - term_1.structure[term1_token_idx].params[param]))
+        
+            for param_idx in np.arange(offspring_1.structure[term1_token_idx].params.size):
+                if param_idx != power_param_idx and param_idx != dim_param_idx:
                     try:
-                        offspring_1.structure[term1_token_idx].params[param] = (term_1.structure[term1_token_idx].params[param] + 
-                                                                   self.params['proportion']*(term_2.structure[term2_token_idx].params[param] 
-                                                                   - term_1.structure[term1_token_idx].params[param]))
+                        offspring_1.structure[term1_token_idx].params[param_idx] = (term_1.structure[term1_token_idx].params[param_idx] + 
+                                                                   self.params['proportion']*(term_2.structure[term2_token_idx].params[param_idx] 
+                                                                   - term_1.structure[term1_token_idx].params[param_idx]))
                     except KeyError:
                         print([(token.label, token.params) for token in offspring_1.structure], [(token.label, token.params) for token in offspring_2.structure])
-                        raise Exception('Wrong set of parameters:', offspring_1.structure[term1_token_idx].params.keys(), offspring_2.structure[term1_token_idx].params.keys())
-                    offspring_2.structure[term2_token_idx].params[param] = (term_1.structure[term1_token_idx].params[param] + 
-                                                               (1 - self.params['proportion'])*(term_2.structure[term2_token_idx].params[param] 
-                                                               - term_1.structure[term1_token_idx].params[param]))
+                        raise Exception('Wrong set of parameters:', offspring_1.structure[term1_token_idx].params_description, offspring_2.structure[term1_token_idx].params_description)
+                    offspring_2.structure[term2_token_idx].params[param_idx] = (term_1.structure[term1_token_idx].params[param_idx] + 
+                                                               (1 - self.params['proportion'])*(term_2.structure[term2_token_idx].params[param_idx] 
+                                                               - term_1.structure[term1_token_idx].params[param_idx]))
+        
+        
+         
         
         offspring_1.Reset_occupied_tokens(); offspring_2.Reset_occupied_tokens()
         return offspring_1, offspring_2
@@ -346,7 +366,7 @@ class Baseline_mutation(Specific_Operator):
                         else:
                             mut_operator = self.suboperators['Mutation']
                         if 'forbidden_tokens' in mut_operator.params.keys():
-                            mut_operator.params['forbidden_tokens'] = equation.structure[equation.target_idx].structure   # [factor.label for factor in equation.structure[].structure]
+                            mut_operator.params['forbidden_tokens'] = [factor for factor in equation.structure[equation.target_idx].structure if factor.status['unique_for_right_part']]   # [factor.label for factor in equation.structure[].structure]
                         equation.structure[term_idx] = mut_operator.apply(term_idx, equation)
                         equation.check_split_correctness()
                 self.suboperators['Coeff_calc'].apply(equation)
@@ -422,7 +442,7 @@ class Baseline_mutation_special(Specific_Operator):
                         else:
                             mut_operator = self.suboperators['Mutation']
                         if 'forbidden_tokens' in mut_operator.params.keys():
-                            mut_operator.params['forbidden_tokens'] = equation.structure[equation.target_idx].structure   # [factor.label for factor in equation.structure[].structure]
+                            mut_operator.params['forbidden_tokens'] = [factor for factor in equation.structure[equation.target_idx].structure if factor.status['unique_for_right_part']]   # [factor.label for factor in equation.structure[].structure]
                         equation.structure[term_idx] = mut_operator.apply(term_idx, equation)
                         equation.check_split_correctness()
                 self.suboperators['Coeff_calc'].apply(equation)
@@ -444,7 +464,7 @@ class Baseline_mutation_special(Specific_Operator):
                         else:
                             mut_operator = self.suboperators['Mutation']
                         if 'forbidden_tokens' in mut_operator.params.keys():
-                            mut_operator.params['forbidden_tokens'] = equation.structure[equation.target_idx].structure   # [factor.label for factor in equation.structure[].structure]
+                            mut_operator.params['forbidden_tokens'] = [factor for factor in equation.structure[equation.target_idx].structure if factor.status['unique_for_right_part']]   # [factor.label for factor in equation.structure[].structure]
                         equation.structure[term_idx] = mut_operator.apply(term_idx, equation)
                         equation.check_split_correctness()
             self.suboperators['Coeff_calc'].apply(equation)
@@ -478,9 +498,9 @@ class Term_mutation(Specific_Operator): # Добавить "запрещённы
             
         """       
 #        print('reference forbidden tokens:', self.params['forbidden_tokens'])
-        new_term = Term(equation.tokens, max_factors_in_term = equation.max_factors_in_term, forbidden_tokens = self.params['forbidden_tokens'])        #) #
+        new_term = Term(equation.pool, max_factors_in_term = equation.max_factors_in_term, forbidden_tokens = self.params['forbidden_tokens'])        #) #
         while not Check_Unqueness(new_term, equation.structure[:term_idx] + equation.structure[term_idx+1:]):
-            new_term = Term(equation.tokens, max_factors_in_term = equation.max_factors_in_term, forbidden_tokens = self.params['forbidden_tokens'])
+            new_term = Term(equation.pool, max_factors_in_term = equation.max_factors_in_term, forbidden_tokens = self.params['forbidden_tokens'])
 #        print(equation.structure[term_idx].text_form, 'mutated into', new_term.text_form)
         new_term.use_cache()
         return new_term
@@ -495,7 +515,7 @@ class Term_mutation(Specific_Operator): # Добавить "запрещённы
 #        return new_term        
 
 
-class Parameter_mutation(Specific_Operator):
+class Parameter_mutation_old(Specific_Operator):
     """
     Specific operator of the term mutation, where the term parameters are changed with a random increment.
     """
@@ -544,7 +564,60 @@ class Parameter_mutation(Specific_Operator):
             term.structure = Filter_powers(term.structure)        
             if Check_Unqueness(term, equation.structure[:term_idx] + equation.structure[term_idx+1:]):
                 break
-        term.clear_value()
+        term.reset_saved_state()
+        return term
+
+
+class Parameter_mutation(Specific_Operator):
+    """
+    Specific operator of the term mutation, where the term parameters are changed with a random increment.
+    """
+    def apply(self, term_idx, equation):
+        """
+        Specific operator of the term mutation, where the term parameters are changed with a random increment.
+        
+        Parameters:
+        -----------
+        term_idx : integer
+            The index of the mutating term in the equation.
+            
+        equation : Equation object
+            The equation object, in which the term is present.
+        
+        Returns:
+        ----------
+        new_term : Term object
+            The new, created from the previous one with random parameters increment, term.
+            
+        """                
+        unmutable_params = {'dim', 'power'}
+        while True:
+            term = equation.structure[term_idx] 
+            for factor in term.structure:   # Возможное место ошибок
+                parameter_selection = deepcopy(factor.params)
+                for param_idx, param_properties in factor.params_description.items():
+#                    if param_properties['name'] == 'power':
+#                        continue
+                    if np.random.random() < self.params['r_param_mutation'] and param_properties['name'] not in unmutable_params:
+                        interval = param_properties['bounds']
+                        if interval[0] == interval[1]:
+                            shift = 0
+                            continue
+                        if isinstance(interval[0], int):
+                            shift = np.rint(np.random.normal(loc= 0, scale = self.params['multiplier']*(interval[1] - interval[0]))).astype(int) #
+                        elif isinstance(interval[0], float):
+                            shift = np.random.normal(loc= 0, scale = self.params['multiplier']*(interval[1] - interval[0]))
+                        else:
+                            raise ValueError('In current version of framework only integer and real values for parameters are supported') 
+                        if self.params['strict_restrictions']:
+                            parameter_selection[param_idx] = np.min((np.max((parameter_selection[param_idx] + shift, interval[0])), interval[1]))
+                        else:
+                            parameter_selection[param_idx] = parameter_selection[param_idx] + shift
+                factor.params = parameter_selection
+            term.structure = Filter_powers(term.structure)        
+            if Check_Unqueness(term, equation.structure[:term_idx] + equation.structure[term_idx+1:]):
+                break
+        term.reset_saved_state()
         return term
 
     
@@ -584,7 +657,7 @@ class Baseline_LASSO(Specific_Operator):
         estimator = Lasso(alpha = self.params['sparcity'], copy_X=True, fit_intercept=True, max_iter=1000,
                                normalize=False, positive=False, precompute=False, random_state=None,
                                selection='cyclic', tol=0.0001, warm_start=False)
-        print('running new lasso')
+#        print('running new lasso')
         _, target, features = equation.evaluate(normalize = True, return_val = False)
 
         estimator.fit(features, target)
@@ -675,14 +748,13 @@ class Baseline_fitness(Specific_Operator):
 #        weights = Get_True_Coefficients(equation)   # Если заработает - настроить без лишних вычислений
 #        print(type(equation), equation.weights_final)
         _, target, features = equation.evaluate(normalize = False, return_val = False)
-#        print('equation final weights:', type(equation), equation.weights_final[0])
         try:
             rl_error = np.linalg.norm(np.dot(features, equation.weights_final[:-1]) + 
                                   np.full(target.shape, equation.weights_final[-1]) - target, ord = 2) # + self.alpha * np.linalg.norm(self.weights, ord = 1)) 
+#            print('error:', rl_error, np.linalg.norm(target, ord = 2), 'shape', [np.linalg.norm(features[..., idx]) for idx in range(features.shape[-1])], np.linalg.norm(np.dot(features, equation.weights_final[:-1])),  
+#                                  np.linalg.norm(np.full(target.shape, equation.weights_final[-1])))
         except ValueError:
-#            print(features.shape, equation.weights_final.shape, target.shape)
             raise ValueError('An error in getting weights ')
-#        print('RL_err', rl_error, equation.weights_final)
         if rl_error == 0:
             fitness_value = np.inf
             print('infinite fitness!', equation.text_form)
@@ -690,5 +762,5 @@ class Baseline_fitness(Specific_Operator):
             fitness_value = 1 / (rl_error)
         if np.sum(equation.weights_final) == 0:
             fitness_value = fitness_value * self.params['penalty_coeff']
-#        print(rl_error, fitness_value, '- fitness; target:', np.max(target), np.min(target), equation.structure[equation.target_idx].text_form)
+#        print(fitness_value)
         equation.fitness_value = fitness_value

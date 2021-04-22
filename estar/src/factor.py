@@ -14,12 +14,14 @@ import src.globals as global_var
 from src.supplementary import factor_params_to_str
 
 class Factor(TerminalToken):
-    def __init__(self, token_name, status, randomize = False):#, token_family, randomize = False):
+    def __init__(self, token_name : str, status : dict, family_type : str, 
+                 randomize : bool = False, params_description = None, equality_ranges = None):#, token_family, randomize = False):
         self.label = token_name
+        self.type = family_type
         self.status = status
-        self.saved = False
         self.grid_set = False
 
+        self.reset_saved_state()
         if type(global_var.tensor_cache) != type(None):
             self.use_cache()
         else:
@@ -29,7 +31,11 @@ class Factor(TerminalToken):
             self.use_grids_cache()
 
         if randomize:
-            self.Set_parameters()
+            assert type(params_description) != type(None) and type(equality_ranges) != type(None)
+            self.Set_parameters(params_description, equality_ranges, random = True)
+
+    def reset_saved_state(self):
+        self.saved = {'base':False, 'structural':False}
 
     @property
     def status(self):
@@ -39,7 +45,7 @@ class Factor(TerminalToken):
     def status(self, status_dict):
         self._status = status_dict
         
-    def Set_parameters(self, random = True, **kwargs):
+    def Set_parameters(self, params_description : dict, equality_ranges : dict, random = True, **kwargs):
         '''
         
         Avoid periodic parameters (e.g. phase shift) 
@@ -50,31 +56,23 @@ class Factor(TerminalToken):
 #            assert set(self.token._evaluator.params['params_names']) != set(kwargs.keys()), 'Incorrect/partial set of parameters used to define factor'
 #                raise Exception()
             _params = np.empty(len(kwargs))
-            assert len(kwargs) == len(self.token.token_params), 'Not all parameters have been declared. Partial randomization TBD'
+            assert len(kwargs) == len(params_description), 'Not all parameters have been declared. Partial randomization TBD'
             for param_idx, param_info in enumerate(kwargs.items()): #param_name, param_val 
                 _params[param_idx] = param_info[1]
                 _params_description[param_idx] = {'name' : param_info[0], 
-                                                          'bounds' : self.token.token_params[param_info[0]]} 
+                                                          'bounds' : params_description[param_info[0]]} 
         else:
-            _params = np.empty(len(self.token.token_params))#OrderedDict()
-            for param_idx, param_info in enumerate(self.token.token_params.items()):
+            _params = np.empty(len(params_description))#OrderedDict()
+            for param_idx, param_info in enumerate(params_description.items()):
                 if param_info[0] != 'power':
-#                    if param_info[1][1] > param_info[1][0]:
-#                        if isinstance(param_info[1][0], int):
-#                            _params[param_idx] = np.random.randint(param_info[1][0], param_info[1][1])
-#                            print('_params[param_idx] is int', _params[param_idx])
-#                        else:
-#                            _params[param_idx] = np.random.uniform(param_info[1][0], param_info[1][1])
-#                            print('_params[param_idx] is float', _params[param_idx])
-#                    else:
-#                        _params[param_idx] = param_info[1][0]
                     _params[param_idx] = (np.random.randint(param_info[1][0], param_info[1][1]) if isinstance(param_info[1][0], int) 
                     else np.random.uniform(param_info[1][0], param_info[1][1])) if param_info[1][1] > param_info[1][0] else param_info[1][0]
-#                    print('random value with type', np.random.randint(param_info[1][0], param_info[1][1]), _params[param_idx], type(_params[param_idx]))
                 else:
                     _params[param_idx] = 1
                 _params_description[param_idx] = {'name' : param_info[0], 
                                                       'bounds' : param_info[1]} 
+        self.equality_ranges = equality_ranges
+#        print(_params_description, params_description)        
         super().__init__(number_params = _params.size, params_description = _params_description, 
                          params = _params)
         if not self.grid_set:
@@ -85,7 +83,7 @@ class Factor(TerminalToken):
             return False
         elif self.label != other.label:
             return False
-        elif any([abs(self.params[idx] - other.params[idx]) > self.token.equality_ranges[self.params_description[idx]['name']] 
+        elif any([abs(self.params[idx] - other.params[idx]) > self.equality_ranges[self.params_description[idx]['name']] 
                                                 for idx in np.arange(self.params.size)]):
             return False
         else:
@@ -96,21 +94,32 @@ class Factor(TerminalToken):
         Return vector of evaluated values
         '''
         raise NotImplementedError('Delete me')
-        return self.token.evaluate(self)    
+        return self.evaluate(self)    
     
-    def evaluate(self): # Переработать/удалить __call__, т.к. его функции уже тут
-#        print(self.cache_linked, self.label)
-
+    def Set_evaluator(self, evaluator):
+        self._evaluator = evaluator
+    
+    def evaluate(self, structural = False): # Переработать/удалить __call__, т.к. его функции уже тут
         assert self.cache_linked
-        if self.saved:
-            return global_var.tensor_cache.get(self.cache_label)
+        key = 'structural' if structural else 'base'
+        if self.saved[key]:
+            return global_var.tensor_cache.get(self.cache_label,
+                                               structural = structural)
         else:
-            value = self.token.evaluate(self)
+#            self.structural = structural
+            value = self._evaluator.apply(self)
 #            print(self.cache_label)
 #            if self.params.size > 1:
 #                raise NotImplementedError('Currently cache processing is implemented only for the single parameter token')
 #            if self.params.size == 1:
-            self.saved = global_var.tensor_cache.add(self.cache_label, value)
+            if key == 'structural' and self.status['structural_and_defalut_merged']:
+                global_var.tensor_cache.use_structural(use_base_data = True)
+            elif key == 'structural' and not self.status['structural_and_defalut_merged']:
+                global_var.tensor_cache.use_structural(use_base_data = False, 
+                                                       label = self.cache_label,
+                                                       replacing_data = value)            
+            else:
+                self.saved[key] = global_var.tensor_cache.add(self.cache_label, value, structural = False)
             return value
 
     @property

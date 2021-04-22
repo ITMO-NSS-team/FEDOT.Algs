@@ -37,16 +37,16 @@ class Evaluator(object):
     apply(token, token_params)
         apply the defined evaluator to evaluate the token with specific parameters
     """
-    def __init__(self, eval_function):
+    def __init__(self, eval_function, eval_kwargs_keys):
         self._evaluator = eval_function
-        
+        self.eval_kwargs_keys = eval_kwargs_keys
 #    def set_params(self, **params):
 #        """
 #        Set the parameters of the evaluator, using keyword arguments
 #        """
 #        self.params = params
         
-    def apply(self, token):
+    def apply(self, token, structural = False, **kwargs):
         """
         Apply the defined evaluator to evaluate the token with specific parameters.
         
@@ -65,10 +65,12 @@ class Evaluator(object):
             If the evaluator could not be applied to the token.
         
         """
-        try:
-            return self._evaluator(token)
-        except TypeError:
-            raise TypeError('Wrong parameters passed into the evaluator.')
+        assert list(kwargs.keys()) == self.eval_kwargs_keys
+#        try:
+        return self._evaluator(token, structural, **kwargs)
+#        except TypeError:
+#            raise TypeError('Wrong parameters passed into the evaluator.')
+            
 
 class Token_family(object):
     """
@@ -132,9 +134,9 @@ class Token_family(object):
         self.type = token_type
         self.evaluator_set = False; self.params_set = False; self.cache_set = False
         
-    def set_status(self, meaningful = False, unique_specific_token = False, 
-                   unique_token_type = False, unique_for_right_part = False,
-                   requires_grid = False):
+    def set_status(self, meaningful = False, s_and_d_merged = True, 
+                   unique_specific_token = False, unique_token_type = False, 
+                   unique_for_right_part = False, requires_grid = False):
         """
         Set the status of the elements of the token family; 
         
@@ -155,6 +157,7 @@ class Token_family(object):
         """
         self.status = {}
         self.status['meaningful'] = meaningful
+        self.status['structural_and_defalut_merged'] = s_and_d_merged
         self.status['unique_specific_token'] = unique_specific_token
         self.status['unique_token_type'] = unique_token_type
         self.status['unique_for_right_part'] = unique_for_right_part
@@ -188,7 +191,7 @@ class Token_family(object):
         if self.evaluator_set:
             self.test_evaluator()
 
-    def set_evaluator(self, eval_function):#, **eval_params):    #Test, if the evaluator works properly
+    def set_evaluator(self, eval_function, eval_kwargs_keys = []):#, **eval_params):    #Test, if the evaluator works properly
         """
         Define the evaluator for the token family and its parameters
         
@@ -240,7 +243,7 @@ class Token_family(object):
         >>> trigonometric_tokens.set_evaluator(trigonometric_evaluator, **trig_eval_params)
         
         """
-        self._evaluator = Evaluator(eval_function)
+        self._evaluator = Evaluator(eval_function, eval_kwargs_keys)
 #        self._evaluator.set_params(**eval_params)
         self.evaluator_set = True
         if self.params_set:
@@ -259,7 +262,7 @@ class Token_family(object):
         Raises Exception, if the evaluator does not work properly.
         """
         assert self.cache_set, 'Cache not passed into the token familiy before test of evaluator'
-        self.test_token = Factor(token_name = np.random.choice(self.tokens), token_family = self, randomize = True)
+        _, self.test_token = self.create()
 #        self.test_token.Set_parameters(random = True)
         self.test_token.use_cache()
         if self.status['requires_grid']:
@@ -275,6 +278,7 @@ class Token_family(object):
 #                else:
 #                    self.test_params[key] = np.random.randint(self.token_params[key][0], self.token_params[key][1])
 #        try:
+        self.test_token.scaled = False
         self.test_evaluation = self._evaluator.apply(self.test_token)
         print('Test evaluation performed correctly')
 #        except:
@@ -298,17 +302,94 @@ class Token_family(object):
             global_var.tensor_cache.delete_entry(label + ' power 1')
       
     def evaluate(self, token):    # Return tensor of values of applied evaluator
+        raise NotImplementedError('Method has been moved to the Factor class')
         if self.evaluator_set and self.cache_set:
             return self._evaluator.apply(token)
         else:
             raise TypeError('Evaluator function or its parameters not set brfore evaluator application.')
     
-    def create():
+    def create(self, label = None, occupied : list = [], def_term_tokens = [], **factor_params):
+        if type(label) == type(None): 
+#            print('tokens in the term:', def_term_tokens)
+            label = np.random.choice([token for token in self.tokens 
+                                      if not token in occupied and 
+                                      not def_term_tokens.count(token) >= self.token_params['power'][1] ])
+        new_factor = Factor(token_name = label, 
+                            status = self.status, family_type = self.type)
         
+        if self.status['unique_token_type']:
+            occupied_by_factor = self.tokens
+        elif self.status['unique_specific_token']:
+            occupied_by_factor = [label,]
+        else:
+            occupied_by_factor = []
+        if len(factor_params) == 0: 
+            new_factor.Set_parameters(params_description = self.token_params, 
+                                      equality_ranges = self.equality_ranges, 
+                                      random = True)
+        else:
+            new_factor.Set_parameters(params_description = self.token_params, 
+                                      equality_ranges = self.equality_ranges, 
+                                      random = False, 
+                                      **factor_params)            
+        new_factor.Set_evaluator(self._evaluator)
+        return occupied_by_factor, new_factor
+    
 #    def change_variables(self, prev_operator):
 #        assert 'token_matrices' in self.eval_params
 #        for key, value in self.set_params['token_matrices'].items():
 #            self.set_params['token_matrices'][key] = value - prev_operator # С индексом? 
+
+    def cardinality(self, occupied : list = []):
+        return len([token for token in self.tokens if not token in occupied])
             
+#    def update_family(self, occupied):
+    
 class TF_Pool(object):
-    def __init__():
+    '''
+    
+    '''
+    def __init__(self, families):
+        self.families = families
+        
+    @property
+    def pool_tokens(self):
+        raise NotImplementedError 
+        
+    @property
+    def families_meaningful(self):
+        return [family for family in self.families if family.status['meaningful']]
+
+    @property
+    def families_supplementary(self):
+        return [family for family in self.families if not family.status['meaningful']]
+
+       
+    def families_cardinality(self, meaningful_only : bool = False, occupied : list = []):
+        if meaningful_only:
+            return np.array([family.cardinality(occupied) for family in self.families_meaningful])
+        else:
+            return np.array([family.cardinality(occupied) for family in self.families])
+        
+    def create(self, label = None, create_meaningful : bool = False, 
+                      occupied : list = [], def_term_tokens = [], **kwargs) -> (str, Factor):
+        if create_meaningful:
+#            print('a', self.families, 'p', self.families_cardinality(True, occupied))
+            if np.sum(self.families_cardinality(True, occupied)) == 0:
+                print('occupied', occupied)
+                raise ValueError('Tring to create a term from an empty pool')
+            return np.random.choice(a = self.families_meaningful, 
+                                    p = self.families_cardinality(True, occupied) / np.sum(self.families_cardinality(True, occupied))).create(label = label, 
+                                                                 occupied = occupied,
+                                                                 def_term_tokens = def_term_tokens,
+                                                                 **kwargs)
+        else:
+            return np.random.choice(a = self.families, 
+                                    p = self.families_cardinality(False)  / np.sum(self.families_cardinality(False))).create(label = label, 
+                                                                 occupied = occupied,
+                                                                 def_term_tokens = def_term_tokens,
+                                                                 **kwargs)
+    
+    def __add__(self, other):
+        return TF_Pool(families = self.families + other.families)
+    

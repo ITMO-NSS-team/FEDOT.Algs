@@ -12,20 +12,24 @@ import warnings
 from functools import reduce
 import copy
 import gc
+import inspect
+import time
 
 from sklearn.linear_model import LinearRegression
 
 import src.globals as global_var
 
+from src.token_family import TF_Pool
 from src.factor import Factor
-from src.supplementary import filter_powers, Population_Sort, form_label#, memory_assesment
-import src.moeadd.moeadd as moeadd
+from src.supplementary import Filter_powers, Population_Sort, form_label#, memory_assesment
+import src.moeadd.moeadd_stc as moeadd
 #import src.moeadd.moeadd_supplementary as moeadd_sup
 
 
 def Check_Unqueness(obj, background):
     return not any([elem == obj for elem in background]) 
     
+
 def normalize_ts(Input):
 #    print('normalize_ts Input:', Input)
     matrix = np.copy(Input)
@@ -43,34 +47,48 @@ def normalize_ts(Input):
                 matrix[i] = 1
         return matrix
 
+
 class Complex_Structure(object):
     def __init__(self, interelement_operator = np.add, *params):
         self.structure = None        
         self.interelement_operator = interelement_operator
     
     def __eq__(self, other):
-        assert type(other) == type(self)
+        if type(other) != type(self):
+            raise ValueError('Type of self and other are different')
         return (all([any([other_elem == self_elem for other_elem in other.structure]) for self_elem in self.structure]) and 
                 all([any([other_elem == self_elem for self_elem in self.structure]) for other_elem in other.structure]) and 
                 len(other.structure) == len(self.structure))
     
-    def evaluate(self):
+    def set_evaluator(self, evaluator):
+        raise NotImplementedError
+#        self._eval_obj = evaluator
+    
+    def evaluate(self, structural = False):
         assert len(self.structure) > 0, 'Attempt to evaluate an empty complex structure'
         if len(self.structure) == 1:
-            return self.structure[0].evaluate()
+            return self.structure[0].evaluate(structural)
         else:
-            return reduce(lambda x, y: self.interelement_operator(x.evaluate(), y.evaluate()), self.structure)        
-        
+#            print([type(elem) for elem in self.structure])
+            return reduce(lambda x, y: self.interelement_operator(x, y.evaluate(structural)),
+                          self.structure[1:], self.structure[0].evaluate(structural))        
+
+    def reset_saved_state(self):
+        self.saved = {True:False, False:False}
+        self.saved_as = {True:None, False:None}
+        for elem in self.structure:
+            elem.reset_saved_state()
+
     @property
     def name(self):
         pass
-    
+
 
 class Term(Complex_Structure):
-    def __init__(self, tokens, 
-                 passed_term = None, max_factors_in_term = 2, forbidden_tokens = None, interelement_operator = np.multiply):
+    def __init__(self, pool, 
+                 passed_term = None, max_factors_in_term = 1, forbidden_tokens = None, interelement_operator = np.multiply):
         super().__init__(interelement_operator) 
-        self.tokens = tokens
+        self.pool = pool
         self.max_factors_in_term = max_factors_in_term
         
         if type(passed_term) == type(None):
@@ -82,13 +100,13 @@ class Term(Complex_Structure):
             self.use_cache()
 #        if type(global_var.grid_cache) != type(None):
 #            self.use_grid_cache()
-        self.clear_value() # key - state of normalization, value - if the variable is saved in cache
+        self.reset_saved_state() # key - state of normalization, value - if the variable is saved in cache
         
     @property
     def cache_label(self):
         if len(self.structure) > 1:
             structure_sorted = sorted(self.structure, key = lambda x: x.cache_label)
-            cache_label = reduce(form_label, structure_sorted, '')
+            cache_label = tuple([elem.cache_label for elem in structure_sorted])#reduce(form_label, structure_sorted, '')
         else:
             cache_label = self.structure[0].cache_label
         return cache_label
@@ -112,169 +130,67 @@ class Term(Complex_Structure):
         if type(passed_term) == list or type(passed_term) == tuple:
             for i, factor in enumerate(passed_term):
                 if type(factor) == str:
-                    token_family = [token_family for token_family in self.tokens if factor in token_family.tokens][0]
-                    self.structure.append(Factor(factor, token_family, randomize = True))
+#                    token_family = [token_family for token_family in self.tokens if factor in token_family.tokens][0]
+#                    self.structure.append(Factor(factor, token_family, randomize = True))
+                    self.structure.append(self.pool.create(label = factor)); raise NotImplementedError
                 elif type(factor) == Factor:
                     self.structure.append(factor)
                 else:
                     raise ValueError('The structure of a term should be declared with str or src.factor.Factor obj, instead got', type(factor))
         else:   # Случай, если подается лишь 1 токен
             if type(passed_term) == str:
-                token_family = [token_family for token_family in self.tokens if passed_term in token_family.tokens][0]
-                self.structure.append(Factor(passed_term, token_family, randomize = True))
+#                token_family = [token_family for token_family in self.tokens if passed_term in token_family.tokens][0]
+#                self.structure.append(Factor(passed_term, token_family, randomize = True))
+                self.structure.append(self.pool.create(label = passed_term)); raise NotImplementedError
             elif type(passed_term) == Factor:
                 self.structure.append(passed_term)
             else:
                 raise ValueError('The structure of a term should be declared with str or src.factor.Factor obj, instead got', type(passed_term))
                 
-
-    def Randomize(self, forbidden_factors = None):    
-        meaningful_tokens = [token_family for token_family in self.tokens if token_family.status['meaningful']]
-        total_meaningful = np.sum([len(token.tokens) for token in meaningful_tokens])
-    
-        if len(meaningful_tokens) == 0:
+                
+    def Randomize(self, forbidden_factors = None, **kwargs):
+        if np.sum(self.pool.families_cardinality(meaningful_only = True)) == 0:
             raise ValueError('No token families are declared as meaningful for the process of the system search')
-        # В каждом слагаемом минимум 1 токен, отобр. моделируемую величину
-#        if len(mandatory_tokens) > self.max_factors_in_term:
-#            raise ValueError('Number of mandatory tokens for term exceeds allowed number of factors')
         factors_num = np.random.randint(1, self.max_factors_in_term +1)
-#        print('creating factors', factors_num)
-
-        while True:
+#        print('factors:', factors_num)
+        while True:        
             self.occupied_tokens_labels = []
-            self.structure = []
-            # В этом приближении гарантированно только 1 обязательный токен в слагаемом, однако дополнительные могут быть добавлены при построении
-            selected_meaningful_family = np.random.choice(meaningful_tokens, 
-                                                          p = [len(token.tokens)/float(total_meaningful) for token in meaningful_tokens])
-            selected_label = np.random.choice(selected_meaningful_family.tokens)            
-            if selected_meaningful_family.status['unique_specific_token']:      # 'single' - токен не может повторяться (даже с разными пар-ми) 
-                self.occupied_tokens_labels.append(selected_label)
-            elif selected_meaningful_family.status['unique_token_type']:  # 'unique_token' - в слагаемом не может быть 2 мн-теля выбранного типа
-                self.occupied_tokens_labels.extend([token_label for token_label in selected_meaningful_family.tokens])
+            occupied_by_factor, factor = self.pool.create(label = None, create_meaningful = True, 
+                                                           occupied = self.occupied_tokens_labels, **kwargs)
+            self.structure = [factor,]
+            self.occupied_tokens_labels.extend(occupied_by_factor)
             
-            self.structure.append(Factor(selected_label, selected_meaningful_family, randomize = True)) # Сделать возм. коллапсировать одинаковые множители в один с большей степенью
-                
             for i in np.arange(1, factors_num):
-                total_tokens_num = np.sum([len(token_family.tokens) for token_family in self.available_tokens], dtype = np.float32)
-                selected_token = np.random.choice(self.available_tokens,
-                                                 p = [len(token_family.tokens)/total_tokens_num for token_family in self.available_tokens])
-                selected_label = np.random.choice(selected_token.tokens)
-    
-                if selected_token.status['unique_specific_token']:      # 'unique_token_type' - токен не может повторяться (даже с разными пар-ми)
-                    self.occupied_tokens_labels.append(selected_label)
-                elif selected_token.status['unique_token_type']:  # 'unique_specific_token' - в слагаемом не может быть 2 мн-теля выбранного типа
-                    self.occupied_tokens_labels.extend([token_label for token_label in selected_token.tokens])
-                
-                self.structure.append(Factor(selected_label, selected_token, randomize = True))
-#                self.structure[i].Set_parameters(random = True) 
-            self.structure = filter_powers(self.structure)
+                occupied_by_factor, factor = self.pool.create(label = None, create_meaningful = False, 
+                                                               occupied = self.occupied_tokens_labels, 
+                                                               def_term_tokens = [token.label for token in self.structure], 
+                                                               **kwargs) 
+                self.structure.append(factor)
+                self.occupied_tokens_labels.extend(occupied_by_factor)                
+            self.structure = Filter_powers(self.structure)
             if type(forbidden_factors) == type(None):
+#                print('term length ff', len(self.structure))
                 break
-            elif all([(Check_Unqueness(factor, forbidden_factors) or not factor.token.status['unique_for_right_part']) for factor in self.structure]):
-                break
-    
-    def Remove_Dublicated_Factors(self, target, background_structure):
-        raise DeprecationWarning('To be deleted')
-        cleared_num = 0
-        cleared_token_families = []
-        structure_cleared = []
-        for factor_idx in range(len(self.structure)):
-            if all([(elem != self.structure[factor_idx] or not elem.token.status['unique_for_right_part']) for elem in target.structure]):
-                structure_cleared.append(self.structure[factor_idx])
-            else:
-                cleared_token_families.append(self.structure[factor_idx].token.type)
-                cleared_num += 1
+            elif all([(Check_Unqueness(factor, forbidden_factors) or not factor.status['unique_for_right_part']) for factor in self.structure]):
+#                print('term length compl cond', len(self.structure), forbidden_factors)
+                break            
 
-        token_selection = self.available_tokens
-        filling_try = 0
-        while True:
-            filling_try += 1
 
-            cleared_token_families_copy = copy.copy(cleared_token_families)
-            if filling_try == 10:
-                cleared_num += 1
-                cleared_token_families_copy.append(np.random.choice(cleared_token_families))
-                
-            if filling_try == 100:
-                print('background:', [token.text_form for token in background_structure])
-                print('self:', self.text_form, cleared_num)
-                warnings.warn('Algorithm is having issues with creation of unique structure: reduce length of equation or increase token pool')
-                
-            structure_filled = copy.deepcopy(structure_cleared)
-            iter_selection_pool = copy.deepcopy(token_selection)
-            for i in np.arange(cleared_num):
-                while True:
-                    iter_selection_pool_copy = copy.copy(iter_selection_pool)
-                    cleared_token_families_copy_2 = copy.copy(cleared_token_families_copy)
-                    
-                    total_tokens_num = np.sum([len(token_family.tokens) for token_family in [token_family_loc for token_family_loc in iter_selection_pool_copy if token_family_loc.type in cleared_token_families_copy]], dtype = np.float32)
-                    try:
-                        selected_token = np.random.choice([token_family_loc for token_family_loc in iter_selection_pool_copy if token_family_loc.type in cleared_token_families_copy_2],
-                                                         p = [len(token_family.tokens)/total_tokens_num for token_family in
-                                                              [token_family_loc for token_family_loc in iter_selection_pool_copy if token_family_loc.type in cleared_token_families_copy_2]]) 
-                    except ValueError:
-                        print('cleared tokens:', cleared_token_families_copy_2, cleared_token_families)
-                        print()
-                        print('current pool:', [token_family_loc for token_family_loc in iter_selection_pool_copy if token_family_loc.type in cleared_token_families_copy_2])
-                        print('occupied tokens:', self.occupied_tokens_labels)
-                        print('available:', [token_family.tokens for token_family in token_selection])
-                        raise ValueError('The framework had issues with creating filtering the tokens: the selection pool is emptied.') from None
-                    
-                    try:
-                        selected_label = np.random.choice(selected_token.tokens)
-                    except ValueError:
-                        print('selected label:', selected_token.type, selected_token.tokens)
-                        print('cleared tokens:', cleared_token_families_copy_2, cleared_token_families)
-                        print('current pool:', [token_family_loc.tokens for token_family_loc in iter_selection_pool_copy if token_family_loc.type in cleared_token_families_copy_2])
-                        print('occupied tokens:', self.occupied_tokens_labels)
-                        print('available:', [token_family.tokens for token_family in token_selection])
-                        print('self:', self.name)
-                        for term in background_structure:
-                            print(term.name)                    
-                        raise ValueError('The framework had issues with selecting the token. Probable cause: lack of initialized tokens') from None
-                        
-                    cleared_token_families_copy_2.remove(selected_token.type)
-                    iter_selection_pool_copy[iter_selection_pool_copy.index(selected_token)].tokens.remove(selected_label)
-                    
-                    temp_token = Factor(selected_label, selected_token, randomize = True)
-#                    parameter_selection = copy.deepcopy(selected_token.token_params)
-#                    for param, interval in selected_token.token_params.items():
-#                        if interval[0] == interval[1]:
-#                            parameter_selection[param] = interval[1]
-#                            continue                    
-#                        if param == 'power':
-#                            parameter_selection[param] = 1
-#                            continue
-#                        parameter_selection[param] = (np.random.randint(interval[0], interval[1])
-#                                                      if isinstance(interval[0], int) else np.random.uniform(interval[0], interval[1]))
-#                    temp_token.Set_parameters(**parameter_selection)
-#                    if all([(Check_Unqueness(factor, target.structure) or factor.token.status['unique_for_right_part']) for factor in new_term.structure]):
-                    if (Check_Unqueness(temp_token, target.structure) or not temp_token.token.status['unique_for_right_part']):
-                        structure_filled.append(temp_token)
-                        break
-             
-            new_term = copy.deepcopy(self)
-            new_term.structure = structure_filled
-            if Check_Unqueness(new_term, background_structure):# and all([(Check_Unqueness(factor, target.structure) or factor.token.status['unique_for_right_part']) for factor in new_term.structure]):
-                del new_term
-                break 
-        self.structure = structure_filled
-        self.clear_value()
-        for idx, _ in enumerate(self.structure):
-#            if not self.structure[idx].cache_linked:
-            self.structure[idx].use_cache()
-             
-    def evaluate(self, normalize = True):
+    def evaluate(self, structural): # , normalize = True
         assert type(global_var.tensor_cache) != type(None), 'Currently working only with connected cache'
 #        print('Normalized state of current equaton: ', normalize)
             
-        if self.saved[normalize]:
-            value = global_var.tensor_cache.get(self.cache_label, normalize, self.saved_as[normalize]) 
+#        print('normalized evaluation', normalize, [elem for idx, elem in enumerate(inspect.stack()[:-18])], len(inspect.stack()))
+#        print('\n')
+        normalize = structural # 
+        if self.saved[structural]:
+            value = global_var.tensor_cache.get(self.cache_label, normalized = normalize,
+                                                saved_as = self.saved_as[normalize]) 
             value = value.reshape(value.size)
             return value
         else:
             self.prev_normalized = normalize
-            value = super().evaluate()
+            value = super().evaluate(structural)
 #            print(self.name, ' - ')
 #            print(value.shape)
             if normalize and np.ndim(value) != 1:
@@ -285,30 +201,30 @@ class Term(Complex_Structure):
                 value = (value - np.mean(value))   
             if np.all([len(factor.params) == 1 for factor in self.structure]):
 #                print(self.cache_label)
-                self.saved[normalize] = global_var.tensor_cache.add(self.cache_label, value, normalize) # Место возможных проблем: сохранение/загрузка нормализованных данных
+                self.saved[normalize] = global_var.tensor_cache.add(self.cache_label, value, normalized = normalize) # Место возможных проблем: сохранение/загрузка нормализованных данных
                 if self.saved[normalize]: self.saved_as[normalize] = self.cache_label 
             value = value.reshape(value.size)
-            return value    
-
-    def clear_value(self):
-        self.saved = {True:False, False:False}
-        self.saved_as = {True:None, False:None}
-        
+            return value            
 
     def Reset_occupied_tokens(self):
         occupied_tokens_new = []
         for factor in self.structure:
-            for token_family in self.tokens:
-                if factor.label in token_family.tokens and token_family.status['unique_token_type']:
+            for token_family in self.pool.families:
+                if factor in token_family.tokens and factor.status['unique_token_type']:
                     occupied_tokens_new.extend([token for token in token_family.tokens])
-                elif factor.label in token_family.tokens and token_family.status['unique_specific_token']:
+                elif factor.status['unique_specific_token']:
                     occupied_tokens_new.append(factor.label)
+#            for token_family in self.tokens:
+#                if factor.label in token_family.tokens and token_family.status['unique_token_type']:
+#                    occupied_tokens_new.extend([token for token in token_family.tokens])
+#                elif factor.label in token_family.tokens and token_family.status['unique_specific_token']:
+#                    occupied_tokens_new.append(factor.label)
         self.occupied_tokens_labels = occupied_tokens_new
 
     @property
-    def available_tokens(self):
+    def available_tokens(self): #Переделать, т.к. меняется пул токенов: старая имплементация через лист
         available_tokens = []
-        for token in self.tokens:
+        for token in self.pool.families:
             if not all([label in self.occupied_tokens_labels for label in token.tokens]):
                 token_new = copy.deepcopy(token)
                 token_new.tokens = [label for label in token.tokens if label not in self.occupied_tokens_labels]
@@ -333,14 +249,16 @@ class Term(Complex_Structure):
         form = r""
 
     def __eq__(self, other):
-        assert type(other) == type(self)
+#        if type(other) != type(self):
+#            print(type(self), type(other), isinstance(self, type(other)))
+#            raise TypeError('Equality check between terms failed. Wrong type passed')
         return (all([any([other_elem == self_elem for other_elem in other.structure]) for self_elem in self.structure]) and 
                 all([any([other_elem == self_elem for self_elem in self.structure]) for other_elem in other.structure]) and 
                 len(other.structure) == len(self.structure))
 
 
 class Equation(Complex_Structure):
-    def __init__(self, tokens, basic_structure, terms_number = 6, max_factors_in_term = 2, interelement_operator = np.add): #eq_weights_eval
+    def __init__(self, pool, basic_structure, terms_number = 6, max_factors_in_term = 2, interelement_operator = np.add): #eq_weights_eval
 
         """
 
@@ -382,20 +300,21 @@ class Equation(Complex_Structure):
         super().__init__(interelement_operator)
 
         self.n_immutable = len(basic_structure)
-        self.tokens = tokens
+        self.pool = pool
         self.structure = []
         self.terms_number = terms_number; self.max_factors_in_term = max_factors_in_term
         self.operator = None
         if (terms_number < self.n_immutable): 
             raise Exception('Number of terms ({}) is too low to even contain all of the pre-determined ones'.format(terms_number))        
             
-        self.structure.extend([Term(self.tokens, passed_term = label, max_factors_in_term = self.max_factors_in_term) for label in basic_structure])
+        self.structure.extend([Term(self.pool, passed_term = label, max_factors_in_term = self.max_factors_in_term) for label in basic_structure])
     
         for i in range(len(basic_structure), terms_number):
             check_test = 0
             while True:
                 check_test += 1 
-                new_term = Term(self.tokens, max_factors_in_term = self.max_factors_in_term, passed_term = None)
+#                print('pool type', type(self.pool))
+                new_term = Term(self.pool, max_factors_in_term = self.max_factors_in_term, passed_term = None)
                 if Check_Unqueness(new_term, self.structure):
                     break
             self.structure.append(new_term)
@@ -408,7 +327,6 @@ class Equation(Complex_Structure):
         self.reset_eval_state()
 
     def select_target_idx(self, separate_vars = [], operator = None, target_idx_fixed = None): 
-        
         '''
         
         Separation of target term from features & removal of factors, that are in target, from features
@@ -420,17 +338,25 @@ class Equation(Complex_Structure):
         if type(target_idx_fixed) == type(None):
             max_fitness = 0
             max_idx = 0
-            for target_idx, target_term in enumerate(self.structure):
+            for target_idx, _ in enumerate(self.structure): # target_term
                 self.target_idx = target_idx
+#                print('target:', self.structure[self.target_idx].name)
                 self.operator.get_fitness(self)
                 if self.described_variables in separate_vars:
-                   self.penalize_fitness(coeff = 0.) 
+#                    print('penalizing')
+                    self.penalize_fitness(coeff = 0.) 
+#                print('idx:', self.target_idx, self.fitness_value, max_fitness, max_idx, '\n\t', self.weights_internal, self.weights_final)
+#                print(self.text_form)                     
                 if self.fitness_value > max_fitness: 
                     max_fitness = self.fitness_value
-                    max_idx = target_idx
+                    max_idx = target_idx                  # Ошибка, когда target_idx == 0
             self.target_idx = max_idx
+#            print('target:', self.structure[self.target_idx].name, self.structure[self.target_idx].evaluate)            
             self.operator.get_fitness(self)
-            assert self.fitness_value == max_fitness
+#            print('idx:', self.target_idx, self.fitness_value, max_fitness, max_idx, '\n\t', self.weights_internal, self.weights_final)
+                        
+            eps = 1e-5
+            assert np.abs(self.fitness_value - max_fitness) < eps
         else:
             self.target_idx = target_idx_fixed
                         
@@ -461,15 +387,14 @@ class Equation(Complex_Structure):
         target_symbolic = [factor.label for factor in self.structure[self.target_idx].structure]
         forbidden_tokens = set()
 
-        for token_family in self.tokens:
+        for token_family in self.pool.families:
             for token in token_family.tokens:
-                if token in target_symbolic and token_family.status['unique_for_right_part']:
+                if token in target_symbolic and token.status['unique_for_right_part']:
                     forbidden_tokens.add(token)        
         return forbidden_tokens
-        
 
 
-    def evaluate(self, normalize = True, return_val = False):
+    def evaluate(self, normalize = True, return_val = False, save = True):
         self._target = self.structure[self.target_idx].evaluate(normalize)
         feature_indexes = list(range(len(self.structure)))
         feature_indexes.remove(self.target_idx)
@@ -488,9 +413,16 @@ class Equation(Complex_Structure):
             if normalize:
 #                value = self._target - np.add(*[np.multiply(weight, temp_feats[:,feature_idx]) 
 #                                                    for feature_idx, weight in np.ndenumerate(self.weights_internal)])                
-                value = self._target - reduce(lambda x,y: np.add(x, y), [np.multiply(weight, temp_feats[:,feature_idx]) 
-                                                    for feature_idx, weight in np.ndenumerate(self.weights_internal)])
+#                value = self._target - reduce(lambda x,y: np.add(x, y), [np.multiply(weight, temp_feats[:,feature_idx]) 
+#                                                    for feature_idx, weight in np.ndenumerate(self.weights_internal)])
+                elem1 = np.expand_dims(self._target, axis = 1)
 
+                value = np.add(elem1, - reduce(lambda x,y: np.add(x, y), [np.multiply(weight, temp_feats[:,feature_idx])
+                                                    for feature_idx, weight in np.ndenumerate(self.weights_internal)])) 
+
+
+                print('normalized equation error shape', value.shape, self._target.shape)
+#                time.sleep(5)
             else:
 #                print(self._features.shape, temp_feats.shape)
 #                print('mult test', [np.multiply(weight, temp_feats[:, feature_idx]) 
@@ -506,6 +438,8 @@ class Equation(Complex_Structure):
                 value = np.add(elem1, - reduce(lambda x,y: np.add(x, y), [np.multiply(weight, temp_feats[:,feature_idx])
                                                     for feature_idx, weight in np.ndenumerate(self.weights_final)])) 
 #                print('value:', value, value.shape)
+                print('non-normalized equation error shape', value.shape)
+#                time.sleep(5)
             
             return value, self._target, self._features
         else:
@@ -540,18 +474,19 @@ class Equation(Complex_Structure):
             raise AttributeError('Internal weights called before initialization')
         
     @weights_internal.setter
-    def weights_internal(self, weights):
+    def weights_internal(self, weights):    # Ошибка!
         self._weights_internal = weights
         self.weights_internal_evald = True
+        self.weights_final_evald = False
         
     @property
-    def weights_final(self):
+    def weights_final(self): # ошибка из-за одинаковых фин. весов для различных индексов правых частей уравнений
         if self.weights_final_evald: # Настроить переоценку после любых изменений структуры уравнения
             return self._weights_final
         else:
-            self._weights_final = Get_true_coeffs(self.tokens, self)
+            self._weights_final = Get_true_coeffs(self)
             self.weights_final_evald = True
-            del self._features, self._target
+#            del self._features, self._target
             return self._weights_final
         
     @property
@@ -571,7 +506,7 @@ class Equation(Complex_Structure):
             if term_idx != self.target_idx:
                 form += str(self.weights_final[term_idx]) if term_idx < self.target_idx else str(self.weights_final[term_idx-1])
                 form += ' * ' + self.structure[term_idx].name + ' + '
-        form += str(self.weights_final[-1]) + ' = ' + self.structure[self.target_idx].text_form
+        form += str(self.weights_final[-1]) + ' = ' + self.structure[self.target_idx].name
         return form        
         
     @property
@@ -580,16 +515,16 @@ class Equation(Complex_Structure):
         described = set()
         for term_idx, term in enumerate(self.structure):
             if term_idx == self.target_idx:
-                described.update({factor.token.type for factor in term.structure})
+                described.update({factor.type for factor in term.structure})
             else:
                 weight_idx = term_idx if term_idx < term_idx else term_idx - 1
                 if np.abs(self.weights_final[weight_idx]) > eps:
 #                    print('to described', self.weights_final[weight_idx], {factor.token.type for factor in term.structure})
-                    described.update({factor.token.type for factor in term.structure})
+                    described.update({factor.type for factor in term.structure})
         described = frozenset(described)
         return described
         
-def Get_true_coeffs(tokens, equation): # Не забыть про то, что последний коэф - для константы
+def Get_true_coeffs(equation): # Не забыть про то, что последний коэф - для константы
     assert equation.weights_internal_evald, 'Trying to calculate final weights before evaluating intermeidate ones (no sparcity).'
     target = equation.structure[equation.target_idx]
 
@@ -634,13 +569,12 @@ def Get_true_coeffs(tokens, equation): # Не забыть про то, что �
 #    print('weights check:', weights, equation.weights_internal)
     return weights
 
-
 class SoEq(Complex_Structure, moeadd.moeadd_solution):
-    def __init__(self, token_families, terms_number, max_factors_in_term, sparcity = None, eq_search_iters = 100):
+    def __init__(self, pool, terms_number, max_factors_in_term, sparcity = None, eq_search_iters = 100):
 #        assert type(sparcity) != type(None) 
-        self.tokens_indep = [family for family in token_families if family.status['meaningful']]
-        self.tokens_dep = [family for family in token_families if not family.status['meaningful']]
-        self.equation_number = len(self.tokens_indep)
+        self.tokens_indep = TF_Pool(pool.families_meaningful) #[family for family in token_families if family.status['meaningful']]
+        self.tokens_dep = TF_Pool(pool.families_supplementary) #[family for family in token_families if not family.status['meaningful']]
+        self.equation_number = np.size(self.tokens_indep.families_cardinality())
         
         if type(sparcity) != None: self.vals = sparcity 
         self.max_terms_number = terms_number; self.max_factors_in_term = max_factors_in_term
@@ -664,16 +598,17 @@ class SoEq(Complex_Structure, moeadd.moeadd_solution):
             self.vals = sparcity
         self.population_size = population_size
         self.structure = []; self.eq_search_iters = eq_search_iters
-        token_selection = copy.deepcopy(self.tokens_indep)
+        token_selection = self.tokens_indep
         
-        self.vars_to_describe = {token_family.type for token_family in self.tokens_dep}
-        self.vars_to_describe = self.vars_to_describe.union({token_family.type for token_family in self.tokens_indep})
+        self.vars_to_describe = {token_family.type for token_family in self.tokens_dep.families}
+        self.vars_to_describe = self.vars_to_describe.union({token_family.type for token_family in self.tokens_indep.families})
         self.separated_vars = set()
         
         for eq_idx in range(self.equation_number):
             current_tokens = token_selection + self.tokens_dep
+            print('Equation index', eq_idx, self.vals)
             self.eq_search_evolutionary_operator.set_sparcity(sparcity_value = self.vals[eq_idx])
-            cur_equation, cur_eq_operator_error = self.optimize_equation(current_tokens, self.eq_search_evolutionary_operator, 
+            cur_equation, cur_eq_operator_error_abs, cur_eq_operator_error_structural = self.optimize_equation(current_tokens, self.eq_search_evolutionary_operator, 
                                                   self.population_size, eq_search_iters, separate_vars = self.separated_vars)
             self.vars_to_describe.difference_update(cur_equation.described_variables)
             self.separated_vars.add(frozenset(cur_equation.described_variables))
@@ -681,31 +616,28 @@ class SoEq(Complex_Structure, moeadd.moeadd_solution):
             self.structure.append(cur_equation)
 #            self.single_vars_in_equation.update()
 #            cache.clear(full = False)
-            global_var.tensor_cache.change_variables(cur_eq_operator_error)
+            if not eq_idx == self.equation_number - 1:
+                global_var.tensor_cache.change_variables(cur_eq_operator_error_abs, 
+                                                         cur_eq_operator_error_structural)
 #            for idx, _ in enumerate(token_selection):
 #                 token_selection[idx].change_variables(cur_eq_operator_error)               
         
-        obj_funs = [self.evaluate,] + [eq.L0_norm for eq in self.structure]
-        moeadd.moeadd_solution.__init__(self, self.vals, obj_funs) # , self) super(
+        obj_funs = np.array([self.evaluate(normalize = False),] + [eq.L0_norm for eq in self.structure])
+        moeadd.moeadd_solution.__init__(self, self.vals, obj_funs) # , return_val = True, self) super(
         self.moeadd_set = True
             
-    def optimize_equation(self, tokens, operator, population_size, eq_search_iters, basic_terms : list = [], separate_vars : set = None):
-        population = [Equation(tokens, basic_terms, self.max_terms_number, self.max_factors_in_term) 
+    def optimize_equation(self, pool, operator, population_size, eq_search_iters, basic_terms : list = [], separate_vars : set = None):
+        population = [Equation(pool, basic_terms, self.max_terms_number, self.max_factors_in_term) 
                         for i in range(population_size)]
         for idx, equation in enumerate(population):
-            print('initial population, idx ', idx, len(equation.structure))
             equation.select_target_idx(separate_vars, operator)
             equation.check_split_correctness()
-#            [print(term.text_form) for term in equation.structure]
-#            print('equation target:', equation.target_idx, equation.structure[equation.target_idx].text_form)
             operator.get_fitness(equation)
             if equation.described_variables in separate_vars:
                 equation.penalize_fitness(coeff = 0.)
         
         for idx in range(eq_search_iters):
-            print('Equation optimiation iteration', idx)
             strict_restrictions = False if idx < eq_search_iters - 1 else True
-#            print(population[0].text_form, population[0].structure[population[0].target_idx].text_form)            
             population = self.equation_opt_iteration(population, self.eq_search_evolutionary_operator, 
                                         population_size, idx, separate_vars, strict_restrictions)
             for equation in population:
@@ -714,7 +646,7 @@ class SoEq(Complex_Structure, moeadd.moeadd_solution):
         population = Population_Sort(population)
         del population[1:]
         
-        return population[0], population[0].evaluate(normalize = False, return_val=True)[0]
+        return population[0], population[0].evaluate(normalize = False, return_val=True)[0], population[0].evaluate(normalize = True, return_val=True)[0]
         
     @staticmethod
     def equation_opt_iteration(population, evol_operator, population_size, iter_index, separate_vars, strict_restrictions = True):
@@ -723,7 +655,7 @@ class SoEq(Complex_Structure, moeadd.moeadd_solution):
                 equation.penalize_fitness(coeff = 0.)           
         population = Population_Sort(population)
         population = population[:population_size]
-        print(iter_index, population[0].fitness_value, population[0].described_variables, separate_vars, population[0].described_variables in separate_vars)
+        print(iter_index, population[0].fitness_value, population[0].L0_norm)#, population[0].described_variables, separate_vars, population[0].described_variables in separate_vars)
         print('Cache size', np.round(global_var.tensor_cache.consumed_memory / 1024**2, decimals=3), 'MB')
         gc.collect()
 #        if iter_index == 2:
@@ -733,17 +665,21 @@ class SoEq(Complex_Structure, moeadd.moeadd_solution):
         population = evol_operator.apply(population, separate_vars)
         return population
     
-    def __eq__(self, other):
-        assert self.moeadd_set, 'The structure of the equation is not defined, therefore no moeadd operations can be called'
-        epsilon = 1e-6
-        if isinstance(other, type(self)):
-            return np.all(np.abs(self.vals - other.vals) < epsilon)
-        else:
-            return NotImplemented
+#    def __eq__(self, other):
+#        assert self.moeadd_set, 'The structure of the equation is not defined, therefore no moeadd operations can be called'
+#        epsilon = 1e-6
+#        if isinstance(other, type(self)):
+#            return np.all(np.abs(self.vals - other.vals) < epsilon)
+#        else:
+#            return NotImplemented
         
     def evaluate(self, normalize = True):
 #            self.evaluated = True
-        value = np.sum([equation.value(normalize) for equation in self.population])
+        if len(self.structure) == 1:
+            value = self.structure[0].evaluate(normalize = normalize, return_val = True)[0]
+        else:
+            value = np.sum([equation.evaluate(normalize, return_val = True)[0] for equation in self.structure])
+        value = np.sum(np.abs(value))
         return value
         
     @property
@@ -766,8 +702,15 @@ class SoEq(Complex_Structure, moeadd.moeadd_solution):
                 else:
                     form += '| ' + equation.text_form + '\n'
         else:
-            form += equation.text_form + '\n'
+            form += self.structure[0].text_form + '\n'
         return form
+
+    def __eq__(self, other):
+        assert self.moeadd_set, 'The structure of the equation is not defined, therefore no moeadd operations can be called'        
+        eps = 1e-9
+        return (all([any([other_elem == self_elem for other_elem in other.structure]) for self_elem in self.structure]) and 
+                all([any([other_elem == self_elem for self_elem in self.structure]) for other_elem in other.structure]) and 
+                len(other.structure) == len(self.structure)) or all(abs(self.obj_funs - other.obj_funs) < eps)        
 
     @property
     def latex_form(self):

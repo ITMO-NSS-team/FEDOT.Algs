@@ -15,3 +15,15 @@ def init_caches(set_grids = False):
         grid_cache = Cache()
     else:
         grid_cache = None
+        
+def delete_cache():
+    global tensor_cache, grid_cache
+    try:
+        del tensor_cache
+    except NameError:
+        print('Failed to delete tensor cache due to its inexistance')
+    try:
+        del grid_cache
+    except NameError:
+        print('Failed to delete grid cache due to its inexistance')
+        

@@ -18,14 +18,19 @@ def memory_assesment():
     print(h.heap())
     del h
 
-def factor_params_to_str(factor, set_default_power = False):
-    param_label= tuple(factor.params)            
-    return (factor.label, param_label)
+def factor_params_to_str(factor, set_default_power = False, power_idx = 0):
+#    power_idx = [key for (key, value) in factor.params_description if value['name'] == 'power']#[0]
+#    print('params:', factor.params, factor.params_description, power_idx)
+    param_label = np.copy(factor.params)            
+    if set_default_power:
+        param_label[power_idx] = 1.
+    return (factor.label, tuple(param_label))
 
 def form_label(x, y):
+    print(type(x), type(y.cache_label))
     return x + ' * ' + y.cache_label if len(x) > 0 else x + y.cache_label
 
-def Detect_Similar_Terms(base_equation_1, base_equation_2):
+def Detect_Similar_Terms_bugged(base_equation_1, base_equation_2): # Переделать!
     equation_1 = copy.deepcopy(base_equation_1); equation_2 = copy.deepcopy(base_equation_2)
     same_terms_from_eq1 = []
     same_terms_from_eq2 = []    
@@ -36,31 +41,102 @@ def Detect_Similar_Terms(base_equation_1, base_equation_2):
     different_terms_from_eq1 = []
     different_terms_from_eq2 = []    
     
-    for eq1_term in base_equation_1.structure:     
+    for eq1_term in base_equation_1.structure:
+#        print('processing', eq1_term.name)
         for eq2_term in base_equation_2.structure:
+            print('processing', eq1_term.name, 'with', eq2_term.name)
             if eq1_term == eq2_term:
                 same_terms_from_eq1.append(eq1_term); same_terms_from_eq2.append(eq2_term);
-                equation_1.structure.remove(eq1_term); equation_2.structure.remove(eq2_term); break
+                print('deleting', eq1_term.name, 'with', eq2_term.name)   
+                try:
+                    equation_1.structure.remove(eq1_term); equation_2.structure.remove(eq2_term); break
+                except ValueError:
+                    print('term 1:', eq1_term.name, 'term 2:', eq2_term.name)
+                    print(equation_1.text_form, '\n', equation_2.text_form)
+                    raise ValueError                 
             elif set([token.label for token in eq1_term.structure]) == set([token.label for token in eq2_term.structure]) and len(eq1_term.structure) == len(eq2_term.structure):
                 similar_terms_from_eq1.append(eq1_term); similar_terms_from_eq2.append(eq2_term); 
                 try:
                     equation_1.structure.remove(eq1_term)
-                    equation_2.structure.remove(eq2_term); 
                 except ValueError:
-                    print(eq1_term.text_form, [factor.text_form for factor in eq1_term.structure])
-                    print([(term == eq1_term, term.text_form, [factor.text_form for factor in eq1_term.structure], (term.structure[0] == eq1_term.structure[0]), (all([any([other_elem == self_elem for other_elem in eq1_term.structure]) for self_elem in term.structure]) and 
-                all([any([other_elem == self_elem for self_elem in term.structure]) for other_elem in eq1_term.structure]) and 
-                len(term.structure) == len(eq1_term.structure))) for term in equation_1.structure])
-                    print([(term == eq1_term, term.text_form, [factor.text_form for factor in eq1_term.structure]) for term in base_equation_1.structure])
+                    print(eq1_term.name, [factor.name for factor in eq1_term.structure])
+#                    print([(term == eq1_term, term.name, [factor.name for factor in eq1_term.structure], (term.structure[0] == eq1_term.structure[0]), (all([any([other_elem == self_elem for other_elem in eq1_term.structure]) for self_elem in term.structure]) and 
+#                all([any([other_elem == self_elem for self_elem in term.structure]) for other_elem in eq1_term.structure]) and 
+#                len(term.structure) == len(eq1_term.structure))) for term in equation_1.structure])
+#                    print([(term == eq1_term, term.name, [factor.name for factor in eq1_term.structure]) for term in base_equation_1.structure])
+                    print([(term.name, eq1_term == term, eq1_term is term) for term in equation_1.structure])
+                    print([term.name for term in equation_1.structure])
                     raise ValueError
+                try:
+                    equation_2.structure.remove(eq2_term)
+                except ValueError:
+                    print(eq2_term.name, [factor.name for factor in eq2_term.structure])
+#                    print([(term == eq1_term, term.name, [factor.name for factor in eq1_term.structure], (term.structure[0] == eq1_term.structure[0]), (all([any([other_elem == self_elem for other_elem in eq1_term.structure]) for self_elem in term.structure]) and 
+#                all([any([other_elem == self_elem for self_elem in term.structure]) for other_elem in eq1_term.structure]) and 
+#                len(term.structure) == len(eq1_term.structure))) for term in equation_1.structure])
+#                    print([(term == eq1_term, term.name, [factor.name for factor in eq1_term.structure]) for term in base_equation_1.structure])
+                    print(base_equation_1.text_form, '\n', base_equation_2.text_form)
+                    print([(term.name, eq2_term == term, eq2_term is term) for term in equation_2.structure])
+                    print(eq2_term in equation_2.structure)
+                    raise ValueError
+
                 break
 
     for term_idx in np.arange(len(equation_1.structure)):
         different_terms_from_eq1.append(equation_1.structure[term_idx]); different_terms_from_eq2.append(equation_2.structure[term_idx])
     return [same_terms_from_eq1, similar_terms_from_eq1, different_terms_from_eq1], [same_terms_from_eq2, similar_terms_from_eq2, different_terms_from_eq2]
-        
 
-def filter_powers(gene):    # Разобраться и переделать
+
+def Detect_Similar_Terms(base_equation_1, base_equation_2): # Переделать!
+#    equation_1 = copy.deepcopy(base_equation_1); equation_2 = copy.deepcopy(base_equation_2)
+    same_terms_from_eq1 = []
+    same_terms_from_eq2 = []    
+    eq2_processed = np.full(shape = len(base_equation_2.structure), fill_value = False)
+    
+    similar_terms_from_eq1 = []
+    similar_terms_from_eq2 = []
+    
+    different_terms_from_eq1 = []
+    different_terms_from_eq2 = []    
+#    print(base_equation_1.text_form)
+#    print(base_equation_2.text_form)
+    for eq1_term in base_equation_1.structure:
+        found_similar = False
+        for idx, eq2_term in enumerate(base_equation_2.structure):
+            if eq1_term == eq2_term and not eq2_processed[idx]:
+                found_similar = True
+                same_terms_from_eq1.append(eq1_term)
+                same_terms_from_eq2.append(eq2_term)
+                eq2_processed[idx] = True
+#                print('Written:', eq1_term.name, '&', eq2_term.name, ': they are the same', 'idx = ', idx)
+                break
+            elif ({token.label for token in eq1_term.structure} == {token.label for token in eq2_term.structure} and 
+                  len(eq1_term.structure) == len(eq2_term.structure) and not eq2_processed[idx]):                
+                found_similar = True
+                similar_terms_from_eq1.append(eq1_term); 
+                similar_terms_from_eq2.append(eq2_term)
+                eq2_processed[idx] = True
+#                print('Written:', eq1_term.name, '&', eq2_term.name, ': they are similar', 'idx = ', idx)
+                break
+        if not found_similar:
+#            print('Written:', eq1_term.name, 'from eq2 : it is unique')
+            different_terms_from_eq1.append(eq1_term)
+            
+    for idx, elem in enumerate(eq2_processed):
+        if not elem: 
+#            print(idx)
+#            print('Written:', base_equation_2.structure[idx].name, 'from eq2 : it is unique')            
+            different_terms_from_eq2.append(base_equation_2.structure[idx])
+        
+#    print(len(same_terms_from_eq1), len(similar_terms_from_eq1), len(different_terms_from_eq1), len(base_equation_1.structure))
+#    print(len(same_terms_from_eq2), len(similar_terms_from_eq2), len(different_terms_from_eq2), len(base_equation_2.structure))
+
+    assert len(same_terms_from_eq1) + len(similar_terms_from_eq1) + len(different_terms_from_eq1) == len(base_equation_1.structure)
+    assert len(same_terms_from_eq2) + len(similar_terms_from_eq2) + len(different_terms_from_eq2) == len(base_equation_2.structure)    
+    return [same_terms_from_eq1, similar_terms_from_eq1, different_terms_from_eq1], [same_terms_from_eq2, similar_terms_from_eq2, different_terms_from_eq2]
+
+
+def Filter_powers(gene):    # Разобраться и переделать
     gene_filtered = []
     for token_idx in range(len(gene)):
         total_power = gene.count(gene[token_idx])

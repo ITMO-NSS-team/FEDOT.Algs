@@ -5,7 +5,7 @@ Created on Fri Feb 14 18:41:16 2020
 
 @author: mike_ubuntu
 """
-import time
+
 import numpy as np
 import datetime
 import multiprocessing as mp
@@ -13,34 +13,7 @@ import multiprocessing as mp
 from prep.cheb import Process_Point_Cheb
 from prep.smoothing import Smoothing
 
-
-def scaling_test(field, steps = None, ff_name = None, output_file_name = None, smooth = True, sigma = 9,
-                           mp_poolsize = 4, max_order = 2, polynomial_window = 9, poly_order = None, boundary = 1):
-    assert field.ndim == 2, 'Test condition of 2D input field was not fullfilled'
-    derivs_raw = Preprocess_derivatives(field, steps, ff_name = ff_name, output_file_name = output_file_name,
-                       smooth=smooth, sigma = sigma, mp_poolsize=mp_poolsize, max_order = 1, polynomial_window=polynomial_window, poly_order=poly_order)
-#    return derivs_fa
-    derivs_raw = derivs_raw.reshape((int(np.sqrt(derivs_raw.shape[0])), int(np.sqrt(derivs_raw.shape[0])), derivs_raw.shape[1]))
-    derivs_raw = derivs_raw[boundary:-boundary, boundary:-boundary]
-    new_coords = np.empty_like(steps)
-    for dim_idx in np.arange(new_coords.size):
-        new_coords[dim_idx] = np.linalg.norm(derivs_raw[..., dim_idx])**(-1) * np.linalg.norm(derivs_raw[..., 0])
-        print(dim_idx, new_coords[dim_idx], np.linalg.norm(derivs_raw[..., dim_idx]))    
-    time.sleep(10)
-    steps = np.array(steps) / new_coords
-    print('new steps:', steps)
-    time.sleep(5)
-    
-    derivs_scaled = Preprocess_derivatives(field, steps, ff_name = None, output_file_name = output_file_name,
-                       smooth=smooth, sigma = sigma, mp_poolsize=mp_poolsize, max_order = max_order, polynomial_window=polynomial_window, poly_order=poly_order)    
-    derivs_scaled = derivs_scaled.reshape((int(np.sqrt(derivs_scaled.shape[0])), int(np.sqrt(derivs_scaled.shape[0])), derivs_scaled.shape[1]))
-    derivs_scaled = derivs_scaled[boundary:-boundary, boundary:-boundary]
-    
-    return derivs_raw, derivs_scaled
-    
-
-def Preprocess_derivatives(field, steps = None, ff_name = None, output_file_name = None, smooth = True, sigma = 9,
-                           mp_poolsize = 4, max_order = 2, polynomial_window = 9, poly_order = None, scaling = False):
+def Preprocess_derivatives(field, steps = None, output_file_name = None, smooth = True, mp_poolsize = 4, max_order = 2, polynomial_window = 9, poly_order = None):
     '''
     
     Main preprocessing function for the calculation of derivatives on uniform grid
@@ -84,10 +57,11 @@ def Preprocess_derivatives(field, steps = None, ff_name = None, output_file_name
     for dim in np.arange(np.ndim(field)):
         dim_coords.append(np.arange(0, field.shape[dim] * steps[dim], steps[dim]))
 
-    if smooth: field = Smoothing(field, 'gaussian', sigma = sigma)
-    index_array = []
-
+        
     grid = np.meshgrid(*dim_coords, indexing = 'ij')
+#    print(grid[0].shape)
+
+    if smooth: field = Smoothing(field, 'gaussian', sigma = 9)
     index_array = []
 
     
@@ -105,16 +79,13 @@ def Preprocess_derivatives(field, steps = None, ff_name = None, output_file_name
         derivatives = list(map(Process_Point_Cheb, index_array))
     t2 = datetime.datetime.now()
 
-
     print('Start:', t1, '; Finish:', t2)
     print('Preprocessing runtime:', t2 - t1)
-    
-#    raise TabError
+        
     #np.save('ssh_field.npy', field)   
-    if type(ff_name) != type(None):
-        np.save(ff_name, field)
     if type(output_file_name) != type(None):
         if not '.npy' in output_file_name:
             output_file_name += '.npy'        
         np.save(output_file_name, derivatives)
-    return np.array(derivatives)        
+    else:
+        return np.array(derivatives)        

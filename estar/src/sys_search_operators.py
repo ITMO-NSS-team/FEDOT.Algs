@@ -19,19 +19,25 @@ def set_argument(var, fun_kwargs, base_value):
     return res
 
 class systems_population_constructor(object):
-    def __init__(self, tokens, terms_number, max_factors_in_term, eq_search_evo):
-        self.tokens = tokens; self.terms_number = terms_number
+    def __init__(self, pool, terms_number, max_factors_in_term, eq_search_evo, sparcity_interval = (0, 1)):
+        self.pool = pool; self.terms_number = terms_number
         self.eq_search_evo = eq_search_evo
         self.max_factors_in_term = max_factors_in_term; #self.eq_search_iters = eq_search_iters
-        self.equation_number = len([1 for token_family in self.tokens if token_family.status['meaningful']])
+        self.equation_number = len(self.pool.families_meaningful)
+        self.sparcity_interval = sparcity_interval
+#        print(self.equation_number)
+#        raise NotImplementedError
+        #len([1 for token_family in self.tokens if token_family.status['meaningful']])
     
     def create(self, **kwargs): # Дописать
         pop_size = set_argument('population_size', kwargs, 16)
-        sparcity = set_argument('sparcity', kwargs, np.random.normal(size = self.equation_number))
-        eq_search_iters = set_argument('eq_search_iters', kwargs, 100)
+        sparcity = set_argument('sparcity', kwargs, np.random.uniform(low = self.sparcity_interval[0], 
+                                                                      high = self.sparcity_interval[1],
+                                                                      size = self.equation_number))
+        eq_search_iters = set_argument('eq_search_iters', kwargs, 400)
         
         print('Creating new equation')
-        created_solution = SoEq(token_families = self.tokens,terms_number = self.terms_number,
+        created_solution = SoEq(pool = self.pool, terms_number = self.terms_number,
                                 max_factors_in_term = self.max_factors_in_term, 
                                 sparcity = sparcity)
         created_solution.set_eq_search_evolutionary(self.eq_search_evo)
@@ -65,7 +71,7 @@ class sys_search_evolutionary_operator(object): # Возможно, органи
 #        output.vals = self._mutation(output.vals) #output.vals + np.random.normal(scale = )
         output = self._mutation(solution)
         output.create_equations()
-        return 
+        return output
 
     def crossover(self, parents_pool):
         offspring_pool = []

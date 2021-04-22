@@ -10,7 +10,7 @@ import numpy as np
 import src.globals as global_var
 from src.supplementary import factor_params_to_str
 
-def simple_function_evaluator(factor):
+def simple_function_evaluator(factor, structural = False, **kwargs):
     '''
     
     Example of the evaluator of token values, appropriate for case of trigonometric functions to be calculated on grid, with results in forms of tensors
@@ -41,15 +41,19 @@ def simple_function_evaluator(factor):
         if param_descr['name'] == 'power': power_param_idx = param_idx
         
     if factor.params[power_param_idx] == 1:
-        value = global_var.tensor_cache.get(factor.cache_label)
+#        print('must be 1', factor.params[power_param_idx])
+        value = global_var.tensor_cache.get(factor.cache_label, structural = structural)
+#        print('evaluating factor:', factor.name, 'structural = ', structural, 'value norm:', np.linalg.norm(value), 'sample:', value.reshape(value.size)[:10])
         return value
     else:
-        value = global_var.tensor_cache.get(factor_params_to_str(factor, set_default_power = True))
+#        print('must not be 1', factor.params[power_param_idx])
+        value = global_var.tensor_cache.get(factor_params_to_str(factor, set_default_power = True, power_idx = power_param_idx), 
+                                            structural = structural)
         value = value**(factor.params[power_param_idx])
         return value
 
 
-def trigonometric_evaluator(factor):
+def trigonometric_evaluator(factor, structual = False, **kwargs):
     
     '''
     
