@@ -7,8 +7,8 @@ Created on Fri Mar  5 13:41:07 2021
 """
 
 import numpy as np
-import src.globals as global_var
-from src.supplementary import factor_params_to_str
+import epde.src.globals as global_var
+from epde.src.supplementary import factor_params_to_str
 
 def simple_function_evaluator(factor, structural = False, **kwargs):
     '''

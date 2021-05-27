@@ -8,8 +8,8 @@ Created on Mon Jul  6 15:39:18 2020
 
 import numpy as np
 
-import src.globals as global_var
-from src.factor import Factor
+import epde.src.globals as global_var
+from epde.src.factor import Factor
 
 def constancy_hard_equality(tensor, epsilon = 1e-7):
     print(np.abs(np.max(tensor) - np.min(tensor)), epsilon, type(np.abs(np.max(tensor) - np.min(tensor))),  type(epsilon))

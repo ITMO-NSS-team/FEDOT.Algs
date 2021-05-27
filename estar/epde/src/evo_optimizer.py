@@ -8,7 +8,7 @@ Created on Wed Jun 17 17:22:20 2020
 
 from abc import ABC, abstractmethod, abstractproperty
 
-import src.eq_search_operators as baseline # 
+import epde.src.eq_search_operators as baseline # 
 
 
 class Operator_builder(ABC):    

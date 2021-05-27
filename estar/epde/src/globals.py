@@ -6,7 +6,7 @@ Created on Tue Feb  9 16:14:57 2021
 @author: mike_ubuntu
 """
 
-from src.cache.cache import Cache
+from epde.src.cache.cache import Cache
 
 def init_caches(set_grids = False):
     global tensor_cache, grid_cache

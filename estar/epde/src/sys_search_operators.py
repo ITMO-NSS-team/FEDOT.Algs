@@ -9,7 +9,7 @@ Created on Wed Jan 20 16:59:24 2021
 import numpy as np
 from copy import deepcopy
 #import 
-from src.structure import SoEq
+from epde.src.structure import SoEq
 
 def set_argument(var, fun_kwargs, base_value):
     try:
@@ -34,7 +34,7 @@ class systems_population_constructor(object):
         sparcity = set_argument('sparcity', kwargs, np.random.uniform(low = self.sparcity_interval[0], 
                                                                       high = self.sparcity_interval[1],
                                                                       size = self.equation_number))
-        eq_search_iters = set_argument('eq_search_iters', kwargs, 400)
+        eq_search_iters = set_argument('eq_search_iters', kwargs, 50)
         
         print('Creating new equation')
         created_solution = SoEq(pool = self.pool, terms_number = self.terms_number,

@@ -8,9 +8,9 @@ Created on Thu Mar  5 13:16:43 2020
 
 import numpy as np
 
-from src.Tokens import TerminalToken
-import src.globals as global_var
-from src.supplementary import factor_params_to_str
+from epde.src.Tokens import TerminalToken
+import epde.src.globals as global_var
+from epde.src.supplementary import factor_params_to_str
 
 class Factor(TerminalToken):
     def __init__(self, token_name : str, status : dict, family_type : str, 

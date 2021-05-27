@@ -10,13 +10,13 @@ import numpy as np
 from copy import deepcopy
 from functools import reduce
 from sklearn.linear_model import Lasso, LinearRegression
-from multiprocessing import Process
+#from multiprocessing import Process
 
 
-import src.globals
-from src.structure import Term, Check_Unqueness
-from src.supplementary import *
-from src.supplementary import Filter_powers, Detect_Similar_Terms
+import epde.src.globals
+from epde.src.structure import Term, Check_Unqueness
+from epde.src.supplementary import *
+from epde.src.supplementary import Filter_powers, Detect_Similar_Terms
 
 
 def flatten(folded_equation):
@@ -164,23 +164,28 @@ class Baseline_crossover(Specific_Operator):
             result_equation_2.check_split_correctness()
             offsprings.extend((result_equation_1, result_equation_2))
         
-        processes = []
+#        processes = []
         for offspring in offsprings:
-            p = Process(target = lambda x: self.suboperators['Coeff_calc'].apply(x), args=(offspring,))
-            processes.append(p)
-            p.start()
-        
-        for p in processes:
-            p.join()
+            self.suboperators['Coeff_calc'].apply(offspring)
             
-        processes = []
         for offspring in offsprings:
-            p = Process(target = lambda x: self.suboperators['Fitness_eval'].apply(x), args=(offspring,))
-            processes.append(p)
-            p.start()
-        
-        for p in processes:
-            p.join()            
+            self.suboperators['Fitness_eval'].apply(offspring)
+#        for offspring in offsprings:
+#            p = Process(target = lambda x: self.suboperators['Coeff_calc'].apply(x), args=(offspring,))
+#            processes.append(p)
+#            p.start()
+#        
+#        for p in processes:
+#            p.join()
+#            
+#        processes = []
+#        for offspring in offsprings:
+#            p = Process(target = lambda x: self.suboperators['Fitness_eval'].apply(x), args=(offspring,))
+#            processes.append(p)
+#            p.start()
+#        
+#        for p in processes:
+#            p.join()            
             
         #map(lambda x: self.suboperators['Coeff_calc'].apply(x), offsprings)
         #map(lambda x: self.suboperators['Fitness_eval'].apply(x), offsprings)

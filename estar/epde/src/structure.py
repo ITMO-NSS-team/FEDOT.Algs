@@ -13,12 +13,12 @@ import gc
 
 from sklearn.linear_model import LinearRegression
 
-import src.globals as global_var
+import epde.src.globals as global_var
 
-from src.token_family import TF_Pool
-from src.factor import Factor
-from src.supplementary import Filter_powers, Population_Sort
-import src.moeadd.moeadd_stc as moeadd
+from epde.src.token_family import TF_Pool
+from epde.src.factor import Factor
+from epde.src.supplementary import Filter_powers, Population_Sort
+import epde.src.moeadd.moeadd_stc as moeadd
 
 
 def Check_Unqueness(obj, background):
