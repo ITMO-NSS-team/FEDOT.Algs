@@ -7,23 +7,25 @@ Created on Wed Apr 21 17:36:43 2021
 """
 
 import numpy as np
-import pandas as pd
 from collections import OrderedDict
-import pickle
+import sys
+import os
 
-import src.globals as global_var
+cwd = os.getcwd()
+sys.path.append(cwd)
 
-from src.moeadd.moeadd import *
-from src.moeadd.moeadd_supplementary import *
+import epde.src.globals as global_var
 
-import src.sys_search_operators as operators
-from src.evo_optimizer import Operator_director, Operator_builder
-from src.evaluators import simple_function_evaluator, trigonometric_evaluator
-from src.supplementary import Define_Derivatives, factor_params_to_str
-from src.cache.cache import Cache, upload_simple_tokens, upload_grids, download_variable, prepare_var_tensor, np_ndarray_section
-from prep.derivatives import Preprocess_derivatives
-from src.structure import SoEq
-from src.token_family import TF_Pool, Token_family
+from epde.src.moeadd.moeadd import *
+from epde.src.moeadd.moeadd_supplementary import *
+
+import epde.src.sys_search_operators as operators
+from epde.src.evo_optimizer import Operator_director
+from epde.src.evaluators import simple_function_evaluator, trigonometric_evaluator
+from epde.src.supplementary import Define_Derivatives
+from epde.src.cache.cache import upload_simple_tokens, upload_grids, prepare_var_tensor
+from epde.prep.derivatives import Preprocess_derivatives
+from epde.src.token_family import TF_Pool, Token_family
 
 if __name__ == '__main__':
     '''
@@ -35,12 +37,15 @@ if __name__ == '__main__':
     ff_filename - имя файла, куда сохраняется временной ряд; output_file_name - имя файла для производных
     step - шаг по времени
     '''
+    
+    delim = '/' if sys.platform == 'linux' else '\\'
+    
     x = np.linspace(0, 4*np.pi, 1000)
-    ts = np.load('preprocessing/Fill366/fill366.npy')
+    ts = np.load(cwd + delim + 'fill366.npy')
     new_derivs = True
     
-    ff_filename = 'preprocessing/Fill366/smoothed_ts.npy'
-    output_file_name = 'preprocessing/Fill366/derivs.npy'
+    ff_filename = cwd + delim + 'smoothed_ts.npy'
+    output_file_name = cwd + delim + 'derivs.npy'
     step = x[1] - x[0]
     
     '''
@@ -55,7 +60,7 @@ if __name__ == '__main__':
     max_order = 1 # presence of the 2nd order derivatives leads to equality u = d^2u/dx^2 on this data (elaborate)
     
     if new_derivs:
-        derivs = Preprocess_derivatives(ts, ff_name = ff_filename, 
+        _, derivs = Preprocess_derivatives(ts, ff_name = ff_filename, 
                                 output_file_name = output_file_name,
                                 steps = (step,), smooth = True, sigma = 1, max_order = max_order)
         ts_smoothed = np.load(ff_filename)        
@@ -64,11 +69,11 @@ if __name__ == '__main__':
             ts_smoothed = np.load(ff_filename)
             derivs = np.load(output_file_name)
         except FileNotFoundError:
-            derivs = Preprocess_derivatives(ts, ff_name = ff_filename, 
+            _, derivs = Preprocess_derivatives(ts, ff_name = ff_filename, 
                                     output_file_name = output_file_name,
                                     steps = (step,), smooth = True, sigma = 1, max_order = max_order)            
             ts_smoothed = np.load(ff_filename)
-    print(derivs.shape)
+#    print(derivs.shape)
     
     '''
     Инициализируем кэш для хранения вычисленных векторов слагаемых, чтобы не пересчитывать их каждый 
@@ -98,8 +103,8 @@ if __name__ == '__main__':
     u_names = ['t',] + Define_Derivatives('u', 1, 1) 
     upload_simple_tokens(u_names, global_var.tensor_cache, u_derivs_stacked)
     global_var.tensor_cache.use_structural()
-
     '''
+
     Далее ряд операций для задания семейств токенов (коорд. ось, исх. функция и её производные в первом 
     семействе, а во втором - тригонометрические функции): 
     задание статуса использования токенов через метод .set_status(...)
@@ -107,8 +112,6 @@ if __name__ == '__main__':
     одного типа, но с разными параметрами (т.е. когда f(x, p1) == f(x, p2), где p1 и p2 - параметры
     вроде частоты, степени и т.д.), задание метода оценки значений токена на сетке через .set_evaluator(...)
     и т.д.
-    
-    
 
     '''
     u_tokens = Token_family('U')
@@ -119,11 +122,6 @@ if __name__ == '__main__':
     u_equal_params = {'power' : 0}
     u_tokens.set_params(u_names, u_token_params, u_equal_params)
     u_tokens.set_evaluator(simple_function_evaluator, [])
-#    
-#    k1 = 0.5; k2 = 2
-#    period_min = k1 * (x[1] - x[0])
-#    period_max = k2 * (x[-1] - x[0]) 
-#    freq_max = 1./period_min; freq_min = 1./period_max; 
     
     trig_tokens = Token_family('trig')
     trig_names = ['sin', 'cos']
@@ -164,7 +162,7 @@ if __name__ == '__main__':
     Задаём объект многокритериального оптимизатора, эволюционный оператор и задаём лучшие возможные 
     значения целевых функций.
     '''
-    optimizer = moeadd_optimizer(pop_constructor, 4, 4, None, delta = 1/50., neighbors_number = 3)
+    optimizer = moeadd_optimizer(pop_constructor, 4, 4, delta = 1/50., neighbors_number = 3, solution_params = {'eq_search_iters':50})
     evo_operator = operators.sys_search_evolutionary_operator(operators.mixing_xover, 
                                                               operators.gaussian_mutation)
 
@@ -180,7 +178,7 @@ if __name__ == '__main__':
     Запускаем оптимизацию
     '''
     
-    optimizer.optimize(simple_selector, 0.95, (4,), 100, 0.75)            
+    optimizer.optimize(simple_selector, 0.95, (4,), 10, 0.75) # Простая форма искомого уравнения найдется и за 10 итераций           
     
     [print(solution.structure[0].text_form, solution.evaluate())  for solution in optimizer.pareto_levels.levels[0]]
     
